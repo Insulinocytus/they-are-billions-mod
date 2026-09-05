@@ -1,0 +1,31 @@
+modLoader="javafml"
+loaderVersion="[1,)"
+license="GPL-3.0-or-later"
+
+[[mods]]
+modId="theyarebillions"
+version="${version}"
+displayName="They Are Billions"
+authors="Insulinocytus"
+description='''High-density night zombie hordes.'''
+
+[[dependencies.theyarebillions]]
+modId="neoforge"
+type="required"
+versionRange="[21.1.249,)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.theyarebillions]]
+modId="minecraft"
+type="required"
+versionRange="[1.21.1,1.22)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.theyarebillions]]
+modId="architectury"
+type="required"
+versionRange="[13.0.11,)"
+ordering="NONE"
+side="BOTH"
