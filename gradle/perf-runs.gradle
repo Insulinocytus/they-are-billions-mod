@@ -1,0 +1,50 @@
+def camel = { String id -> id.split("-").collect { it.capitalize() }.join() }
+def perfOutput = rootProject.file("perf/results").absolutePath.replace("\\", "/")
+def warmup = (findProperty("perf.warmupTicks") ?: "400").toString()
+def duration = (findProperty("perf.durationTicks") ?: "12000").toString()
+def generateTicks = (findProperty("perf.generateTicks") ?: "200").toString()
+def xmx = (findProperty("perf.xmx") ?: "8G").toString()
+def platform = project.name
+
+def perfVmArgs = { String scenario, String mode, String side ->
+    [
+            "-Xmx${xmx}",
+            "-Dtheyarebillions.perf.enabled=true",
+            "-Dtheyarebillions.perf.mode=${mode}",
+            "-Dtheyarebillions.perf.scenario=${scenario}",
+            "-Dtheyarebillions.perf.loader=${platform}",
+            "-Dtheyarebillions.perf.side=${side}",
+            "-Dtheyarebillions.perf.output=${perfOutput}",
+            "-Dtheyarebillions.perf.warmupTicks=${warmup}",
+            "-Dtheyarebillions.perf.durationTicks=${duration}",
+            "-Dtheyarebillions.perf.generateTicks=${generateTicks}"
+    ]
+}
+
+loom {
+    runs {
+        ["open-field", "walled-mountain"].each { scenario ->
+            "perfGenerate${camel(scenario)}" {
+                server()
+                runDir = "../perf/runs/${platform}-server"
+                perfVmArgs(scenario, "generate", "server").each { vmArg it }
+            }
+            "perfIdleServer${camel(scenario)}" {
+                server()
+                runDir = "../perf/runs/${platform}-server"
+                perfVmArgs(scenario, "idle", "server").each { vmArg it }
+            }
+            "perfIdleClient${camel(scenario)}" {
+                client()
+                runDir = "../perf/runs/${platform}-client"
+                perfVmArgs(scenario, "idle", "client").each { vmArg it }
+                programArg "--quickPlaySingleplayer"
+                programArg scenario
+                programArg "--width"
+                programArg "1920"
+                programArg "--height"
+                programArg "1080"
+            }
+        }
+    }
+}
