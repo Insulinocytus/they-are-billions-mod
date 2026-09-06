@@ -104,6 +104,25 @@ class HordePlannerTest {
         assertNull(plan(0, 1000, 0).sector());
     }
 
+    @Test
+    void acceptsBlockCentersOnInclusiveRingEdges() {
+        HordePlanner.Sector sector = new HordePlanner.Sector(0.5, 0.5, 0.0, 128, 144);
+        assertTrue(sector.containsBlockCenter(128, 0));
+        assertTrue(sector.containsBlockCenter(144, 0));
+        assertFalse(sector.containsBlockCenter(127, 0));
+        assertFalse(sector.containsBlockCenter(145, 0));
+    }
+
+    @Test
+    void rejectsFlooredBlockCentersThatLeaveTheRing() {
+        HordePlanner.Sector sector = new HordePlanner.Sector(0.9, 0.0, 0.0, 128, 144);
+        assertFalse(sector.containsBlockCenter(128, 0));
+        assertTrue(sector.containsBlockCenter(129, 0));
+        HordePlanner.Sector outer = new HordePlanner.Sector(0.1, 0.0, 0.0, 128, 144);
+        assertFalse(outer.containsBlockCenter(144, 0));
+        assertTrue(outer.containsBlockCenter(143, 0));
+    }
+
     private static HordePlanner.Plan plan(long dayTime, int target, int ordinaryZombies) {
         return HordePlanner.plan(snapshot(true, false, true, dayTime, target, ordinaryZombies));
     }

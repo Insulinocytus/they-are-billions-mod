@@ -86,5 +86,11 @@ public final class HordePlanner {
 
     public record Sector(
             double originX, double originZ, double directionRadians, int minDistance, int maxDistance) {
+        public boolean containsBlockCenter(int blockX, int blockZ) {
+            double dx = blockX + 0.5 - originX;
+            double dz = blockZ + 0.5 - originZ;
+            double horizontal = Math.hypot(dx, dz);
+            return horizontal >= minDistance && horizontal <= maxDistance;
+        }
     }
 }

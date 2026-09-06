@@ -28,6 +28,7 @@ public final class HordeGameTests {
         helper.assertTrue(zombie != null, "vanilla zombie should exist");
         helper.assertTrue(HordeSpawner.isHordeMember(zombie), "zombie should carry horde tag");
         helper.assertTrue(HordeSpawner.hasPersistentHordeTag(zombie), "horde tag should persist in NBT");
+        helper.assertTrue(!zombie.isPersistenceRequired(), "horde tag must not force persistence");
         helper.succeed();
     }
 }

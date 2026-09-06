@@ -13,8 +13,6 @@ import net.minecraft.world.Difficulty;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobSpawnType;
-import net.minecraft.world.entity.SpawnPlacements;
-import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
@@ -58,18 +56,12 @@ public final class HordeSpawner {
             return false;
         }
         level.getChunk(pos);
-        if (!SpawnPlacements.isSpawnPositionOk(EntityType.ZOMBIE, level, pos)) {
-            return false;
-        }
-        if (!Monster.checkAnyLightMonsterSpawnRules(EntityType.ZOMBIE, level, MobSpawnType.EVENT, pos, level.random)) {
-            return false;
-        }
         Zombie zombie = EntityType.ZOMBIE.create(level);
         if (zombie == null) {
             return false;
         }
         zombie.moveTo(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5, level.random.nextFloat() * 360.0F, 0.0F);
-        if (!zombie.checkSpawnObstruction(level)) {
+        if (!HordeSpawnAccess.checkSpawnPosition(zombie, level)) {
             zombie.discard();
             return false;
         }
@@ -79,7 +71,6 @@ public final class HordeSpawner {
             return false;
         }
         zombie.addTag(HORDE_TAG);
-        zombie.setPersistenceRequired();
         return level.addFreshEntity(zombie);
     }
 
@@ -127,6 +118,9 @@ public final class HordeSpawner {
         double distance = sector.minDistance() + level.random.nextDouble() * span;
         int blockX = Mth.floor(sector.originX() + Math.cos(sector.directionRadians()) * distance);
         int blockZ = Mth.floor(sector.originZ() + Math.sin(sector.directionRadians()) * distance);
+        if (!sector.containsBlockCenter(blockX, blockZ)) {
+            return false;
+        }
         level.getChunk(blockX >> 4, blockZ >> 4);
         int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, blockX, blockZ);
         return spawnHordeMember(level, new BlockPos(blockX, y, blockZ));
