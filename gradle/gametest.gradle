@@ -1,0 +1,28 @@
+loom {
+    runs {
+        gameTestServer {
+            server()
+            name "Game Test Server"
+            runDir "build/gametest"
+            if (project.name == "fabric") {
+                vmArg "-Dfabric-api.gametest"
+                vmArg "-Dfabric-api.gametest.report-file=${project.layout.buildDirectory.get()}/gametest/junit.xml"
+            } else {
+                vmArg "-Dneoforge.enableGameTest=true"
+                vmArg "-Dneoforge.gameTestServer=true"
+                vmArg "-Dneoforge.enabledGameTestNamespaces=theyarebillions"
+            }
+        }
+    }
+}
+
+afterEvaluate {
+    def run = tasks.findByName("runGameTestServer")
+    if (run != null) {
+        run.doFirst {
+            def eula = project.file("build/gametest/eula.txt")
+            eula.parentFile.mkdirs()
+            eula.text = "eula=true\n"
+        }
+    }
+}

@@ -3,7 +3,11 @@
   "minVersion": "0.8",
   "package": "com.insulinocytus.theyarebillions.mixin",
   "compatibilityLevel": "JAVA_21",
-  "mixins": [],
+  "mixins": [
+    "GameRulesAccessor",
+    "GameRulesIntegerValueAccessor",
+    "SpawnPlacementsMixin"
+  ],
   "client": [
     "MinecraftFrameSamplerMixin"
   ],

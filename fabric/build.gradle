@@ -1,5 +1,6 @@
 apply plugin: "com.gradleup.shadow"
 apply from: rootProject.file("gradle/perf-runs.gradle")
+apply from: rootProject.file("gradle/gametest.gradle")
 
 configurations {
     common

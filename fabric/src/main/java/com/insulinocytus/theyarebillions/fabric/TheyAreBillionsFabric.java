@@ -20,7 +20,7 @@ public final class TheyAreBillionsFabric implements ModInitializer {
     public void onInitialize() {
         TheyAreBillions.initialize();
         ServerTickEvents.START_SERVER_TICK.register(PerfHarness::onTickStart);
-        ServerTickEvents.END_SERVER_TICK.register(PerfHarness::onTickEnd);
+        ServerTickEvents.END_SERVER_TICK.register(TheyAreBillions::onServerTickEnd);
         ServerLoginConnectionEvents.QUERY_START.register((listener, server, sender, synchronizer) -> {
             ServerLoginNetworking.registerReceiver(listener, VERSION_CHANNEL,
                     (server1, listener1, understood, response, synchronizer1, responseSender) -> {
