@@ -2,9 +2,6 @@ modLoader="javafml"
 loaderVersion="[1,)"
 license="GPL-3.0-or-later"
 
-[[mixins]]
-config = "theyarebillions.mixins.json"
-
 [[mods]]
 modId="theyarebillions"
 version="${version}"
