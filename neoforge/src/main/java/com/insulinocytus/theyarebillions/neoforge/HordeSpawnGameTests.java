@@ -10,6 +10,7 @@ import net.minecraft.world.Difficulty;
 import net.minecraft.world.level.block.Blocks;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.entity.living.FinalizeSpawnEvent;
 import net.neoforged.neoforge.event.entity.living.MobSpawnEvent;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
@@ -23,26 +24,51 @@ public final class HordeSpawnGameTests {
     }
 
     @GameTest(template = "empty")
+    public static void spawnPlacementCheckFailBlocksSpawn(GameTestHelper helper) {
+        assertEventBlocksSpawn(helper, new FailSpawnPlacement(), "SpawnPlacementCheck FAIL should block spawn");
+    }
+
+    @GameTest(template = "empty")
     public static void positionCheckFailBlocksSpawn(GameTestHelper helper) {
+        assertEventBlocksSpawn(helper, new FailPositionCheck(), "PositionCheck FAIL should block spawn");
+    }
+
+    @GameTest(template = "empty")
+    public static void finalizeSpawnCancelBlocksSpawn(GameTestHelper helper) {
+        assertEventBlocksSpawn(helper, new CancelFinalizeSpawn(), "FinalizeSpawn cancel should block spawn");
+    }
+
+    private static void assertEventBlocksSpawn(GameTestHelper helper, Object denier, String message) {
         helper.getLevel().getServer().setDifficulty(Difficulty.NORMAL, true);
         helper.setBlock(new BlockPos(2, 1, 2), Blocks.GRASS_BLOCK);
         BlockPos feet = helper.absolutePos(new BlockPos(2, 2, 2));
-        FailPositionCheck denier = new FailPositionCheck();
         NeoForge.EVENT_BUS.register(denier);
         try {
-            helper.assertFalse(
-                    HordeSpawner.spawnHordeMember(helper.getLevel(), feet),
-                    "PositionCheck FAIL should block spawn");
+            helper.assertFalse(HordeSpawner.spawnHordeMember(helper.getLevel(), feet), message);
         } finally {
             NeoForge.EVENT_BUS.unregister(denier);
         }
         helper.succeed();
     }
 
+    public static final class FailSpawnPlacement {
+        @SubscribeEvent
+        public void deny(MobSpawnEvent.SpawnPlacementCheck event) {
+            event.setResult(MobSpawnEvent.SpawnPlacementCheck.Result.FAIL);
+        }
+    }
+
     public static final class FailPositionCheck {
         @SubscribeEvent
         public void deny(MobSpawnEvent.PositionCheck event) {
             event.setResult(MobSpawnEvent.PositionCheck.Result.FAIL);
+        }
+    }
+
+    public static final class CancelFinalizeSpawn {
+        @SubscribeEvent
+        public void deny(FinalizeSpawnEvent event) {
+            event.setSpawnCancelled(true);
         }
     }
 }

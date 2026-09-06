@@ -12,7 +12,6 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
@@ -56,6 +55,9 @@ public final class HordeSpawner {
             return false;
         }
         level.getChunk(pos);
+        if (!HordeSpawnAccess.checkSpawnPlacement(level, pos)) {
+            return false;
+        }
         Zombie zombie = EntityType.ZOMBIE.create(level);
         if (zombie == null) {
             return false;
@@ -65,8 +67,7 @@ public final class HordeSpawner {
             zombie.discard();
             return false;
         }
-        zombie.finalizeSpawn(level, level.getCurrentDifficultyAt(pos), MobSpawnType.EVENT, null);
-        if (HordeSpawnAccess.isSpawnCancelled(zombie)) {
+        if (!HordeSpawnAccess.finalizeHordeSpawn(zombie, level)) {
             zombie.discard();
             return false;
         }
@@ -128,7 +129,7 @@ public final class HordeSpawner {
 
     private static ServerPlayer findValidPlayer(ServerLevel level) {
         for (ServerPlayer player : level.players()) {
-            if (player.getClass() != ServerPlayer.class) {
+            if (HordeSpawnAccess.isFakePlayer(player)) {
                 continue;
             }
             GameType mode = player.gameMode.getGameModeForPlayer();
