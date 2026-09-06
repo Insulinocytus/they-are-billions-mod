@@ -61,10 +61,12 @@ Fabric 与 NeoForge 的两个场景都必须达到目标才发布 `0.1.0`。任�
 
 结果写到 `perf/results/<loader>-<scenario>-<mode>-<timestamp>/metrics.json`，并附带 Minecraft 原生 JFR `recording.jfr`。
 
-服务端堆内存默认 8 GB，可用 `-Pperf.xmx=8G` 覆盖。
+服务端堆内存默认 8 GB，可用 `-Pperf.xmx=8G` 覆盖；该参数会写成 JVM `-Xmx`。
+
+`generatePerfBaselines` 与 `runIdleServerBaseline` 会按 Fabric → NeoForge 串行运行，避免并行占用 25565 和同一套硬件。Fabric 使用 25565，NeoForge 使用 25566。
 
 ## 数据采集
 
 - 服务端使用 Minecraft 原生 JFR（`JvmProfiler`），不安装 Spark 或其他性能分析 Mod。MSPT 平均与 P95 由模组在 `-Dtheyarebillions.perf.mode=idle` 时按 tick 采样写入 `metrics.json`。
-- 客户端优先用 PresentMon 记录 `msBetweenPresents`：`perf/tools/capture-presentmon.ps1 -OutputCsv perf/results/frames.csv -DurationSeconds 600`。未安装 PresentMon 时，同一 idle 客户端运行会把平均 FPS 与 P95 帧时间写入 `metrics.json`。
+- 客户端优先用 PresentMon 记录 `msBetweenPresents`。Gradle JavaExec 客户端默认是 `java.exe`：`perf/tools/capture-presentmon.ps1 -OutputCsv perf/results/frames.csv -DurationSeconds 600`。也可 `-ProcessId <pid>`。脚本使用 `--terminate_after_timed`，到时后退出再汇总。未安装 PresentMon 时，同一 idle 客户端运行会把平均 FPS 与 P95 帧时间写入 `metrics.json`。
 - `/theyarebillions status` 记录测试时的尸潮成员、普通 Zombie、玩家群组、活动票据、共享路线、挖掘点和性能调节档位。

@@ -21,9 +21,9 @@ public final class PerfHarness {
     private static PerfSettings settings;
     private static DurationSampler tickSampler;
     private static DurationSampler frameSampler;
-    private static boolean recording;
-    private static boolean started;
-    private static boolean stopping;
+    private static volatile boolean recording;
+    private static volatile boolean started;
+    private static volatile boolean stopping;
     private static int ticks;
     private static Path runOutput;
     private static Path jfrPath;
@@ -71,7 +71,7 @@ public final class PerfHarness {
     }
 
     public static void endFrame() {
-        if (!recording || frameSampler == null) {
+        if (frameSampler == null) {
             return;
         }
         frameSampler.end(Util.getNanos());

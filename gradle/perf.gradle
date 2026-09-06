@@ -16,8 +16,9 @@ gradle.projectsEvaluated {
     def cacheDirectory = { String platform, String scenario ->
         repoFile("perf/cache/${platform}/${scenario}/world")
     }
-    def writeServerProperties = { File workDir, Object spec ->
+    def writeServerProperties = { File workDir, Object spec, String platform ->
         def generator = JsonOutput.toJson(spec.generatorSettings)
+        def port = platform == "fabric" ? 25565 : 25566
         new File(workDir, "eula.txt").text = "eula=true\n"
         new File(workDir, "server.properties").text = """enable-jmx-monitoring=false
 level-name=world
@@ -38,6 +39,7 @@ generate-structures=false
 allow-nether=false
 sync-chunk-writes=true
 max-tick-time=-1
+server-port=${port}
 motd=They Are Billions Perf
 """
     }
@@ -59,7 +61,7 @@ enabled=true
             }
         }
     }
-    def prepareGenerate = { String scenario, File workDir ->
+    def prepareGenerate = { String platform, String scenario, File workDir ->
         def spec = loadScenario(scenario)
         def worldDir = new File(workDir, "world")
         ant.delete(dir: worldDir)
@@ -67,7 +69,7 @@ enabled=true
         ant.copy(todir: datapackDest) {
             fileset(dir: repoFile("perf/scenarios/${scenario}/datapack"))
         }
-        writeServerProperties(workDir, spec)
+        writeServerProperties(workDir, spec, platform)
     }
     def prepareIdle = { String platform, String scenario, String side, File workDir ->
         def cache = cacheDirectory(platform, scenario)
@@ -77,7 +79,7 @@ enabled=true
         def spec = loadScenario(scenario)
         if (side == "server") {
             copyTreeExcludingLock(cache, new File(workDir, "world"))
-            writeServerProperties(workDir, spec)
+            writeServerProperties(workDir, spec, platform)
         } else {
             copyTreeExcludingLock(cache, new File(workDir, "saves/${scenario}"))
             new File(workDir, "options.txt").text = """renderDistance:10
@@ -106,16 +108,18 @@ tutorialStep:none
         def clientDir = runDirectory(platform, "client")
         perfScenarios.each { scenario ->
             proj.tasks.named("runPerfGenerate${camel(scenario)}").configure { task ->
+                task.maxHeapSize = (findProperty("perf.xmx") ?: "8G").toString()
                 task.doFirst {
                     serverDir.mkdirs()
                     writeRequest(platform, scenario, "generate", "server")
-                    prepareGenerate(scenario, serverDir)
+                    prepareGenerate(platform, scenario, serverDir)
                 }
                 task.doLast {
                     cacheWorld(platform, scenario, "server")
                 }
             }
             proj.tasks.named("runPerfIdleServer${camel(scenario)}").configure { task ->
+                task.maxHeapSize = (findProperty("perf.xmx") ?: "8G").toString()
                 task.doFirst {
                     serverDir.mkdirs()
                     writeRequest(platform, scenario, "idle", "server")
@@ -123,6 +127,7 @@ tutorialStep:none
                 }
             }
             proj.tasks.named("runPerfIdleClient${camel(scenario)}").configure { task ->
+                task.maxHeapSize = (findProperty("perf.xmx") ?: "8G").toString()
                 task.doFirst {
                     clientDir.mkdirs()
                     writeRequest(platform, scenario, "idle", "client")
@@ -137,24 +142,39 @@ tutorialStep:none
     def selectedPlatforms = findProperty("perf.platform") ? [findProperty("perf.platform").toString()] : perfPlatforms
     def selectedScenarios = findProperty("perf.scenario") ? [findProperty("perf.scenario").toString()] : perfScenarios
 
+    def chainSerial = { List<String> paths ->
+        for (int i = 1; i < paths.size(); i++) {
+            def current = paths[i]
+            def previous = paths[i - 1]
+            def projectPath = current.substring(0, current.lastIndexOf(":"))
+            def taskName = current.substring(current.lastIndexOf(":") + 1)
+            project(projectPath).tasks.named(taskName).configure {
+                mustRunAfter previous
+            }
+        }
+    }
+
+    def generatePaths = []
+    def idleServerPaths = []
+    selectedPlatforms.each { platform ->
+        selectedScenarios.each { scenario ->
+            generatePaths << ":${platform}:runPerfGenerate${camel(scenario)}"
+            idleServerPaths << ":${platform}:runPerfIdleServer${camel(scenario)}"
+        }
+    }
+    chainSerial(generatePaths)
+    chainSerial(idleServerPaths)
+
     tasks.register("generatePerfBaselines") {
         group = "performance"
         description = "Generate gitignored world caches for both loaders and scenarios."
-        selectedPlatforms.each { platform ->
-            selectedScenarios.each { scenario ->
-                dependsOn ":${platform}:runPerfGenerate${camel(scenario)}"
-            }
-        }
+        dependsOn generatePaths
     }
 
     tasks.register("runIdleServerBaseline") {
         group = "performance"
         description = "Copy cached worlds and run idle dedicated-server baselines with JFR and MSPT."
-        selectedPlatforms.each { platform ->
-            selectedScenarios.each { scenario ->
-                dependsOn ":${platform}:runPerfIdleServer${camel(scenario)}"
-            }
-        }
+        dependsOn idleServerPaths
     }
 
     tasks.register("runIdleClientBaseline") {

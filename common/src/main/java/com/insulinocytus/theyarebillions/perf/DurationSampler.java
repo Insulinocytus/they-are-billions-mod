@@ -6,6 +6,7 @@ public final class DurationSampler {
     private long[] values;
     private int size;
     private long startNanos;
+    private boolean inFlight;
 
     public DurationSampler() {
         this(4096);
@@ -15,11 +16,16 @@ public final class DurationSampler {
         this.values = new long[Math.max(8, initialCapacity)];
     }
 
-    public void begin(long nanos) {
+    public synchronized void begin(long nanos) {
         startNanos = nanos;
+        inFlight = true;
     }
 
-    public void end(long nanos) {
+    public synchronized void end(long nanos) {
+        if (!inFlight) {
+            return;
+        }
+        inFlight = false;
         add(nanos - startNanos);
     }
 

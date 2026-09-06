@@ -3,10 +3,12 @@ def perfOutput = rootProject.file("perf/results").absolutePath.replace("\\", "/"
 def warmup = (findProperty("perf.warmupTicks") ?: "400").toString()
 def duration = (findProperty("perf.durationTicks") ?: "12000").toString()
 def generateTicks = (findProperty("perf.generateTicks") ?: "200").toString()
+def xmx = (findProperty("perf.xmx") ?: "8G").toString()
 def platform = project.name
 
 def perfVmArgs = { String scenario, String mode, String side ->
     [
+            "-Xmx${xmx}",
             "-Dtheyarebillions.perf.enabled=true",
             "-Dtheyarebillions.perf.mode=${mode}",
             "-Dtheyarebillions.perf.scenario=${scenario}",

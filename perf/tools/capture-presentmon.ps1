@@ -1,5 +1,6 @@
 param(
-    [string]$ProcessName = "javaw",
+    [string]$ProcessName = "java",
+    [int]$ProcessId = 0,
     [Parameter(Mandatory = $true)]
     [string]$OutputCsv,
     [int]$DurationSeconds = 600
@@ -23,7 +24,19 @@ if ($outputDir) {
     New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
 }
 
-& $presentMonPath -process_name $ProcessName -output_file $OutputCsv -stop_existing_session -timed $DurationSeconds
+$captureArgs = @(
+    "-output_file", $OutputCsv,
+    "-stop_existing_session",
+    "-timed", $DurationSeconds,
+    "--terminate_after_timed"
+)
+if ($ProcessId -gt 0) {
+    $captureArgs = @("-process_id", $ProcessId) + $captureArgs
+} else {
+    $captureArgs = @("-process_name", $ProcessName) + $captureArgs
+}
+
+& $presentMonPath @captureArgs
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
