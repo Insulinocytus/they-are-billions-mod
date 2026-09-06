@@ -2,6 +2,7 @@ package com.insulinocytus.theyarebillions;
 
 import com.insulinocytus.theyarebillions.horde.HordeController;
 import com.insulinocytus.theyarebillions.horde.HordeGameRules;
+import com.insulinocytus.theyarebillions.perf.PerfHarness;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,5 +24,6 @@ public final class TheyAreBillions {
         HordeGameRules.register();
         HordeController.register();
         LOGGER.info("{} {} loaded", MOD_NAME, VERSION);
+        PerfHarness.initialize();
     }
 }

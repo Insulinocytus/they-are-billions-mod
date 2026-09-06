@@ -2,7 +2,9 @@ package com.insulinocytus.theyarebillions.fabric;
 
 import com.insulinocytus.theyarebillions.ModVersionHandshake;
 import com.insulinocytus.theyarebillions.TheyAreBillions;
+import com.insulinocytus.theyarebillions.perf.PerfHarness;
 import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.fabricmc.fabric.api.networking.v1.ServerLoginConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerLoginNetworking;
@@ -17,6 +19,8 @@ public final class TheyAreBillionsFabric implements ModInitializer {
     @Override
     public void onInitialize() {
         TheyAreBillions.initialize();
+        ServerTickEvents.START_SERVER_TICK.register(PerfHarness::onTickStart);
+        ServerTickEvents.END_SERVER_TICK.register(PerfHarness::onTickEnd);
         ServerLoginConnectionEvents.QUERY_START.register((listener, server, sender, synchronizer) -> {
             ServerLoginNetworking.registerReceiver(listener, VERSION_CHANNEL,
                     (server1, listener1, understood, response, synchronizer1, responseSender) -> {

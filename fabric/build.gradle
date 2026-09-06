@@ -1,4 +1,5 @@
 apply plugin: "com.gradleup.shadow"
+apply from: rootProject.file("gradle/perf-runs.gradle")
 
 loom {
     accessWidenerPath = project(":common").loom.accessWidenerPath

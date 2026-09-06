@@ -93,3 +93,5 @@ tasks.register("verifyDevelopmentJars") {
         }
     }
 }
+
+apply from: "gradle/perf.gradle"

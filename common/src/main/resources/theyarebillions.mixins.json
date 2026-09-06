@@ -9,6 +9,9 @@
     "SpawnPlacementsMixin",
     "ZombieHordeMemberMixin"
   ],
+  "client": [
+    "MinecraftFrameSamplerMixin"
+  ],
   "injectors": {
     "defaultRequire": 1
   }
