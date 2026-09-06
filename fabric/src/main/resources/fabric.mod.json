@@ -9,8 +9,11 @@
   "environment": "*",
   "entrypoints": {
     "main": ["com.insulinocytus.theyarebillions.fabric.TheyAreBillionsFabric"],
-    "client": ["com.insulinocytus.theyarebillions.fabric.client.TheyAreBillionsFabricClient"]
+    "client": ["com.insulinocytus.theyarebillions.fabric.client.TheyAreBillionsFabricClient"],
+    "fabric-gametest": ["com.insulinocytus.theyarebillions.gametest.HordeSpawnGameTests"]
   },
+  "mixins": ["theyarebillions.mixins.json"],
+  "accessWidener": "theyarebillions.accesswidener",
   "depends": {
     "fabricloader": ">=0.19.5",
     "minecraft": "~1.21.1",

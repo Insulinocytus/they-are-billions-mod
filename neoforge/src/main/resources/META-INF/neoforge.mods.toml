@@ -9,6 +9,9 @@ displayName="They Are Billions"
 authors="Insulinocytus"
 description='''High-density night zombie hordes.'''
 
+[[mixins]]
+config = "theyarebillions.mixins.json"
+
 [[dependencies.theyarebillions]]
 modId="neoforge"
 type="required"

@@ -1,5 +1,18 @@
 apply plugin: "com.gradleup.shadow"
 
+loom {
+    accessWidenerPath = project(":common").loom.accessWidenerPath
+
+    runs {
+        gametest {
+            server()
+            name = "Game Test"
+            vmArg "-Dfabric-api.gametest"
+            vmArg "-Dfabric-api.gametest.report-file=${layout.buildDirectory.get().asFile}/gametest/junit.xml"
+        }
+    }
+}
+
 configurations {
     common
     shadowCommon
@@ -19,6 +32,11 @@ dependencies {
 
 processResources {
     inputs.property("version", project.version)
+
+    from(project(":common").file("src/main/resources")) {
+        include "theyarebillions.accesswidener"
+        include "theyarebillions.mixins.json"
+    }
 
     filesMatching("fabric.mod.json") {
         expand("version": project.version)

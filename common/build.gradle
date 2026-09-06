@@ -1,3 +1,7 @@
+loom {
+    accessWidenerPath = file("src/main/resources/theyarebillions.accesswidener")
+}
+
 def generatedVersionSource = layout.buildDirectory.dir("generated/sources/version/java/main")
 
 sourceSets.main.java.srcDir(generatedVersionSource)

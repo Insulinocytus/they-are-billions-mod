@@ -2,7 +2,7 @@
 
 ## 持续集成
 
-GitHub Actions 使用 Java 21 构建 common、Fabric 与 NeoForge，运行单元测试，并确认两个加载器的发布 JAR 均能产出。
+GitHub Actions 使用 Java 21 构建 common、Fabric 与 NeoForge，运行单元测试与两个加载器的 GameTest，并确认两个加载器的发布 JAR 均能产出。
 
 性能基准不在共享 CI 中判定通过或失败；它使用固定硬件和 `docs/performance.md` 中的可复现世界手动运行。
 
@@ -19,4 +19,4 @@ GitHub Actions 使用 Java 21 构建 common、Fabric 与 NeoForge，运行单元
 
 ## GameTest
 
-Fabric 与 NeoForge 各运行最小平台 GameTest，验证尸潮生成及标记、FakePlayer 破坏事件、白天清理、命名脱离和区块票据申请释放。
+Fabric 与 NeoForge 各运行最小平台 GameTest，验证尸潮生成及标记、FakePlayer 破坏事件、白天清理、命名脱离和区块票据申请释放。本地可用 `:fabric:runGametest` 与 `:neoforge:runGameTestServer`。

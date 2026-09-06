@@ -1,5 +1,19 @@
 apply plugin: "com.gradleup.shadow"
 
+loom {
+    accessWidenerPath = project(":common").loom.accessWidenerPath
+
+    runs {
+        gameTestServer {
+            server()
+            name = "Game Test"
+            property "neoforge.gameTestServer", "true"
+            property "neoforge.enableGameTest", "true"
+            property "neoforge.enabledGameTestNamespaces", "theyarebillions"
+        }
+    }
+}
+
 configurations {
     common
     shadowCommon
