@@ -50,9 +50,8 @@ jobs:
           cache: gradle
       - name: Platform Build and JAR Packaging Checks
         run: ./gradlew :${{ matrix.project }}:build :${{ matrix.project }}:verifyJarPackaging --no-daemon --console=plain
-      # FIXME: Replace this placeholder when Server Integration Tests are implemented.
       - name: Server Integration Tests
-        run: echo "Server Integration Tests are not implemented yet."
+        run: ./gradlew :${{ matrix.project }}:runGameTestServer --no-daemon --console=plain
       - name: Client Startup Smoke Tests
         timeout-minutes: 3
         shell: bash

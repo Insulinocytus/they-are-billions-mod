@@ -22,6 +22,6 @@ public final class TheyAreBillionsNeoForge {
                 EventPriority.NORMAL,
                 false,
                 ServerTickEvent.Post.class,
-                event -> PerfHarness.onTickEnd(event.getServer()));
+                event -> TheyAreBillions.onServerTickEnd(event.getServer()));
     }
 }
