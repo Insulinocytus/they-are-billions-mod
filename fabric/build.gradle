@@ -13,15 +13,15 @@ dependencies {
     modImplementation "net.fabricmc.fabric-api:fabric-api:${rootProject.fabric_api_version}"
     modApi "dev.architectury:architectury-fabric:${rootProject.architectury_version}"
 
-    common(project(path: ":common", configuration: "namedElements")) { transitive false }
-    shadowCommon(project(path: ":common", configuration: "transformProductionFabric")) { transitive false }
+    common(project(path: ":common", configuration: "namedElements")) { transitive = false }
+    shadowCommon(project(path: ":common", configuration: "transformProductionFabric")) { transitive = false }
 }
 
 processResources {
-    inputs.property "version", project.version
+    inputs.property("version", project.version)
 
     filesMatching("fabric.mod.json") {
-        expand "version": project.version
+        expand("version": project.version)
     }
 }
 
