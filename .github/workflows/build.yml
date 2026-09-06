@@ -22,8 +22,12 @@ jobs:
           java-version: "21"
       - name: Build and verify development JARs
         run: ./gradlew :common:test :fabric:build :neoforge:build verifyDevelopmentJars --no-daemon --console=plain
-      - name: Run Fabric and NeoForge GameTests
-        run: ./gradlew :fabric:runGametest :neoforge:runGameTestServer --no-daemon --console=plain
+      - name: Run Fabric GameTests
+        timeout-minutes: 5
+        run: ./gradlew :fabric:runGametest --no-daemon --console=plain
+      - name: Run NeoForge GameTests
+        timeout-minutes: 5
+        run: ./gradlew :neoforge:runGameTestServer --no-daemon --console=plain
       - name: Start Fabric and NeoForge clients and dedicated servers
         shell: bash
         run: |
