@@ -1,0 +1,39 @@
+def generatedVersionSource = layout.buildDirectory.dir("generated/sources/version/java/main")
+
+sourceSets.main.java.srcDir(generatedVersionSource)
+
+tasks.register("generateModVersionSource") {
+    inputs.property("version", project.version)
+    outputs.dir(generatedVersionSource)
+
+    doLast {
+        def output = generatedVersionSource.get().file(
+                "com/insulinocytus/theyarebillions/BuildConstants.java").asFile
+        output.parentFile.mkdirs()
+        output.text = """package com.insulinocytus.theyarebillions;
+
+public final class BuildConstants {
+    public static final String VERSION = \"${project.version}\";
+
+    private BuildConstants() {
+    }
+}
+"""
+    }
+}
+
+tasks.named("compileJava") {
+    dependsOn("generateModVersionSource")
+}
+
+tasks.named("sourcesJar") {
+    dependsOn("generateModVersionSource")
+}
+
+dependencies {
+    modImplementation "net.fabricmc:fabric-loader:${rootProject.fabric_loader_version}"
+    modApi "dev.architectury:architectury:${rootProject.architectury_version}"
+
+    testImplementation "org.junit.jupiter:junit-jupiter:5.11.0"
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+}

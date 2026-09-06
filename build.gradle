@@ -1,0 +1,95 @@
+plugins {
+    id "architectury-plugin" version "${architectury_plugin_version}"
+    id "dev.architectury.loom" version "${architectury_loom_version}" apply false
+    id "com.gradleup.shadow" version "9.6.1" apply false
+}
+
+architectury {
+    minecraft = project.minecraft_version
+}
+
+subprojects {
+    apply plugin: "java"
+    apply plugin: "maven-publish"
+    apply plugin: "architectury-plugin"
+
+    if (project.name != "common") {
+        project.extensions.extraProperties.set("loom.platform", project.name)
+    }
+    apply plugin: "dev.architectury.loom"
+
+    if (project.name == "common") {
+        architectury {
+            common(rootProject.enabled_platforms.split(","))
+        }
+    } else {
+        architectury {
+            platformSetupLoomIde()
+            if (project.name == "fabric") {
+                fabric()
+            } else if (project.name == "neoforge") {
+                neoForge()
+            }
+        }
+    }
+
+    version = rootProject.mod_version
+    group = rootProject.maven_group
+
+    base {
+        archivesName = "${rootProject.archives_base_name}-${project.name}"
+    }
+
+    repositories {
+        mavenCentral()
+        maven { url = "https://maven.neoforged.net/releases/" }
+    }
+
+    loom {
+        silentMojangMappingsLicense()
+    }
+
+    dependencies {
+        minecraft "com.mojang:minecraft:${rootProject.minecraft_version}"
+        mappings loom.officialMojangMappings()
+    }
+
+    java {
+        toolchain.languageVersion = JavaLanguageVersion.of(rootProject.java_version as int)
+        withSourcesJar()
+    }
+
+    tasks.withType(JavaCompile).configureEach {
+        options.encoding = "UTF-8"
+        options.release = rootProject.java_version as int
+    }
+
+    tasks.withType(Test).configureEach {
+        useJUnitPlatform()
+    }
+}
+
+tasks.register("verifyDevelopmentJars") {
+    dependsOn(":fabric:remapJar", ":neoforge:remapJar")
+
+    doLast {
+        ["fabric", "neoforge"].each { platform ->
+            def output = project(":${platform}").layout.buildDirectory.dir("libs").get().asFile
+            def artifact = output.listFiles()?.find {
+                it.name.endsWith(".jar") && !it.name.contains("sources") && !it.name.contains("dev-shadow")
+            }
+            if (artifact == null) {
+                throw new GradleException("${platform} development JAR was not produced")
+            }
+
+            def metadata = platform == "fabric" ? "fabric.mod.json" : "META-INF/neoforge.mods.toml"
+            new java.util.jar.JarFile(artifact).withCloseable { jar ->
+                [metadata, "LICENSE"].each { entry ->
+                    if (jar.getJarEntry(entry) == null) {
+                        throw new GradleException("${artifact.name} is missing ${entry}")
+                    }
+                }
+            }
+        }
+    }
+}

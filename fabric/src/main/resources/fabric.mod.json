@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "theyarebillions",
+  "version": "${version}",
+  "name": "They Are Billions",
+  "description": "High-density night zombie hordes.",
+  "authors": ["Insulinocytus"],
+  "license": "GPL-3.0-or-later",
+  "environment": "*",
+  "entrypoints": {
+    "main": ["com.insulinocytus.theyarebillions.fabric.TheyAreBillionsFabric"],
+    "client": ["com.insulinocytus.theyarebillions.fabric.client.TheyAreBillionsFabricClient"]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.5",
+    "minecraft": "~1.21.1",
+    "java": ">=21",
+    "fabric-api": ">=0.116.17+1.21.1",
+    "architectury": ">=13.0.11"
+  }
+}

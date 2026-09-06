@@ -1,0 +1,66 @@
+name: Build
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Build and verify development JARs
+        run: ./gradlew :common:test :fabric:build :neoforge:build verifyDevelopmentJars --no-daemon --console=plain
+      - name: Start Fabric and NeoForge clients and dedicated servers
+        shell: bash
+        run: |
+          version=$(grep -E '^mod_version=' gradle.properties | cut -d= -f2)
+          start_and_check() {
+            local platform="$1"
+            local target="$2"
+            shift 2
+            local log="${platform}-${target}.log"
+            "$@" >"${log}" 2>&1 &
+            local pid=$!
+
+            for _ in $(seq 1 120); do
+              if grep -Fq "They Are Billions ${version} loaded" "${log}"; then
+                kill "${pid}"
+                wait "${pid}" || true
+                return 0
+              fi
+              if ! kill -0 "${pid}" 2>/dev/null; then
+                cat "${log}"
+                return 1
+              fi
+              sleep 1
+            done
+
+            kill "${pid}" 2>/dev/null || true
+            wait "${pid}" || true
+            cat "${log}"
+            return 1
+          }
+
+          start_and_check fabric server ./gradlew :fabric:runServer --no-daemon --console=plain
+          start_and_check neoforge server ./gradlew :neoforge:runServer --no-daemon --console=plain
+          start_and_check fabric client xvfb-run --auto-servernum ./gradlew :fabric:runClient --no-daemon --console=plain
+          start_and_check neoforge client xvfb-run --auto-servernum ./gradlew :neoforge:runClient --no-daemon --console=plain
+      - uses: actions/upload-artifact@v7
+        with:
+          name: development-jars
+          path: |
+            fabric/build/libs/*.jar
+            neoforge/build/libs/*.jar
+          if-no-files-found: error
