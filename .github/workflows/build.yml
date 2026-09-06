@@ -17,9 +17,6 @@ jobs:
           distribution: temurin
           java-version: "21"
       - name: Build and verify development JARs
-        # verifyDevelopmentJars checks that both loader remapJars exist and
-        # contain the packaged metadata plus LICENSE, so CI fails if a
-        # platform JAR is missing or not recognizable as this mod.
         run: ./gradlew :common:test :fabric:build :neoforge:build verifyDevelopmentJars --no-daemon --console=plain
       - name: Start Fabric and NeoForge clients and dedicated servers
         shell: bash
