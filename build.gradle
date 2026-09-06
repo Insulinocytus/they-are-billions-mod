@@ -69,24 +69,28 @@ subprojects {
     }
 }
 
-tasks.register("verifyDevelopmentJars") {
-    dependsOn(":fabric:remapJar", ":neoforge:remapJar")
+[
+    fabric: "fabric.mod.json",
+    neoforge: "META-INF/neoforge.mods.toml"
+].each { platform, metadata ->
+    project(":${platform}") {
+        tasks.register("verifyJarPackaging") {
+            dependsOn("remapJar")
 
-    doLast {
-        ["fabric", "neoforge"].each { platform ->
-            def output = project(":${platform}").layout.buildDirectory.dir("libs").get().asFile
-            def artifact = output.listFiles()?.find {
-                it.name.endsWith(".jar") && !it.name.contains("sources") && !it.name.contains("dev-shadow")
-            }
-            if (artifact == null) {
-                throw new GradleException("${platform} development JAR was not produced")
-            }
+            doLast {
+                def output = project.layout.buildDirectory.dir("libs").get().asFile
+                def artifact = output.listFiles()?.find {
+                    it.name.endsWith(".jar") && !it.name.contains("sources") && !it.name.contains("dev-shadow")
+                }
+                if (artifact == null) {
+                    throw new GradleException("${platform} JAR was not produced")
+                }
 
-            def metadata = platform == "fabric" ? "fabric.mod.json" : "META-INF/neoforge.mods.toml"
-            new java.util.jar.JarFile(artifact).withCloseable { jar ->
-                [metadata, "LICENSE"].each { entry ->
-                    if (jar.getJarEntry(entry) == null) {
-                        throw new GradleException("${artifact.name} is missing ${entry}")
+                new java.util.jar.JarFile(artifact).withCloseable { jar ->
+                    [metadata, "LICENSE"].each { entry ->
+                        if (jar.getJarEntry(entry) == null) {
+                            throw new GradleException("${artifact.name} is missing ${entry}")
+                        }
                     }
                 }
             }

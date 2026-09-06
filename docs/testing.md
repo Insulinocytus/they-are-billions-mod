@@ -2,21 +2,30 @@
 
 ## 持续集成
 
-GitHub Actions 使用 Java 21 构建 common、Fabric 与 NeoForge，运行单元测试，并确认两个加载器的发布 JAR 均能产出。
+GitHub Actions 对 Ready PR 的最新提交运行三个并行检查：
 
-性能基准不在共享 CI 中判定通过或失败；它使用固定硬件和 `docs/performance.md` 中的可复现世界手动运行。`generatePerfBaselines`、`runIdleServerBaseline` 和 `runIdleClientBaseline` 只在开发者机器上执行。CI 仍运行场景文件与 MSPT/P95 计算的单元测试。
+- **Unit Tests**：验证不依赖运行中 Minecraft 世界的通用逻辑。
+- **Fabric Validation**：依次执行 Fabric Platform Build 与 JAR Packaging Checks、Server Integration Tests 和 Client Startup Smoke Tests。
+- **NeoForge Validation**：依次执行 NeoForge Platform Build 与 JAR Packaging Checks、Server Integration Tests 和 Client Startup Smoke Tests。
 
-## 单元测试
+Draft PR 不运行检查；Ready PR 后续每次 push 会重新验证最新提交。也可以通过 `workflow_dispatch` 手动运行完整验证。合并到 `main` 后不重复测试、不构建或上传 artifact；未来需要发布时再增加 GitHub Release workflow。
 
-首版使用 JUnit 测试不依赖运行中 Minecraft 世界的纯逻辑：
+三个检查均使用 Gradle 依赖缓存。Unit Tests 最多运行 10 分钟；每个平台的 Validation 最多运行 15 分钟，其中 Client Startup Smoke Tests 最多运行 3 分钟。Fabric 与 NeoForge 即使其中一个失败，另一个也会继续完成。
 
-- 玩家连通分组与预算转移
-- 夜间线性数量目标
-- 性能调节器升降档
-- 路线缓存失效与接入点选择
-- 挖掘参与者、全局名额与两秒进度清零
-- 区块票据引用计数
+性能基准不在共享 CI 中判定通过或失败；它使用固定硬件和 `docs/performance.md` 中的可复现世界手动运行。`generatePerfBaselines`、`runIdleServerBaseline` 和 `runIdleClientBaseline` 只在开发者机器上执行。Unit Tests 仍验证场景文件与 MSPT/P95 计算。
 
-## GameTest
+## Unit Tests
 
-Fabric 与 NeoForge 各运行最小平台 GameTest，验证尸潮生成及标记、FakePlayer 破坏事件、白天清理、命名脱离和区块票据申请释放。
+当前使用 JUnit 验证模组版本握手，以及性能工具的设置、采样、场景文件和汇总计算。
+
+## JAR Packaging Checks
+
+Fabric 与 NeoForge 的 Platform Build 分别检查最终 JAR 是否存在，并确认其中包含对应加载器的模组元数据和 `LICENSE`。检查读取 runner 中的本地产物，不上传 artifact。
+
+## Server Integration Tests
+
+Server Integration Tests 应启动真实 Minecraft 服务端并执行世界内断言。当前尚未实装；工作流中的同名步骤只是带有 `FIXME` 的成功占位符，不提供服务端运行覆盖。
+
+## Client Startup Smoke Tests
+
+Fabric 与 NeoForge 分别启动客户端，确认日志报告模组已加载后结束进程。该检查只验证客户端入口、Mixin 和资源可以完成初始化，不验证 UI 或玩法行为。
