@@ -20,14 +20,6 @@ public final class ValidPlayers {
     }
 
     public static boolean isValid(ServerPlayer player) {
-        if (!player.gameMode.getGameModeForPlayer().isSurvival()) {
-            return false;
-        }
-        for (Class<?> type = player.getClass(); type != null && type != ServerPlayer.class; type = type.getSuperclass()) {
-            if (type.getSimpleName().contains("FakePlayer")) {
-                return false;
-            }
-        }
-        return true;
+        return player.gameMode.getGameModeForPlayer().isSurvival() && !FakePlayers.isFake(player);
     }
 }

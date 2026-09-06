@@ -4,6 +4,7 @@
   "package": "com.insulinocytus.theyarebillions.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
+    "MobDespawnMixin",
     "MonsterLightMixin",
     "SpawnPlacementsMixin",
     "ZombieHordeMemberMixin"

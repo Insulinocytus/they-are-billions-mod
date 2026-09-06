@@ -17,4 +17,8 @@ public final class HordeMembers {
             marker.theyarebillions$setHordeMember(hordeMember);
         }
     }
+
+    public static boolean suppressesVanillaDistanceDespawn(Entity entity) {
+        return isHordeMember(entity);
+    }
 }
