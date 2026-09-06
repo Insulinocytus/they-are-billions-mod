@@ -7,9 +7,6 @@
   "authors": ["Insulinocytus"],
   "license": "GPL-3.0-or-later",
   "environment": "*",
-  "mixins": [
-    "theyarebillions.mixins.json"
-  ],
   "entrypoints": {
     "main": ["com.insulinocytus.theyarebillions.fabric.TheyAreBillionsFabric"],
     "client": ["com.insulinocytus.theyarebillions.fabric.client.TheyAreBillionsFabricClient"],
