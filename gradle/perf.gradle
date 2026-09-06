@@ -1,0 +1,171 @@
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
+
+def perfScenarios = ["open-field", "walled-mountain"]
+def perfPlatforms = ["fabric", "neoforge"]
+def camel = { String id -> id.split("-").collect { it.capitalize() }.join() }
+
+gradle.projectsEvaluated {
+    def repoFile = { String path -> rootProject.file(path) }
+    def loadScenario = { String id ->
+        new JsonSlurper().parse(repoFile("perf/scenarios/${id}/scenario.json"))
+    }
+    def runDirectory = { String platform, String side ->
+        repoFile("perf/runs/${platform}-${side}")
+    }
+    def cacheDirectory = { String platform, String scenario ->
+        repoFile("perf/cache/${platform}/${scenario}/world")
+    }
+    def writeServerProperties = { File workDir, Object spec ->
+        def generator = JsonOutput.toJson(spec.generatorSettings)
+        new File(workDir, "eula.txt").text = "eula=true\n"
+        new File(workDir, "server.properties").text = """enable-jmx-monitoring=false
+level-name=world
+level-seed=${spec.seed}
+level-type=${spec.levelType}
+generator-settings=${generator}
+gamemode=${spec.gameMode}
+difficulty=${spec.difficulty}
+spawn-protection=0
+view-distance=${spec.viewDistance}
+simulation-distance=${spec.simulationDistance}
+max-players=8
+online-mode=false
+spawn-monsters=false
+spawn-animals=false
+spawn-npcs=false
+generate-structures=false
+allow-nether=false
+sync-chunk-writes=true
+max-tick-time=-1
+motd=They Are Billions Perf
+"""
+    }
+    def writeRequest = { String platform, String scenario, String mode, String side ->
+        def request = repoFile("perf/runs/request.properties")
+        request.parentFile.mkdirs()
+        request.text = """mode=${mode}
+scenario=${scenario}
+loader=${platform}
+side=${side}
+enabled=true
+"""
+    }
+    def copyTreeExcludingLock = { File from, File to ->
+        ant.delete(dir: to)
+        ant.copy(todir: to) {
+            fileset(dir: from) {
+                exclude(name: "session.lock")
+            }
+        }
+    }
+    def prepareGenerate = { String scenario, File workDir ->
+        def spec = loadScenario(scenario)
+        def worldDir = new File(workDir, "world")
+        ant.delete(dir: worldDir)
+        def datapackDest = new File(worldDir, "datapacks/theyarebillions_perf")
+        ant.copy(todir: datapackDest) {
+            fileset(dir: repoFile("perf/scenarios/${scenario}/datapack"))
+        }
+        writeServerProperties(workDir, spec)
+    }
+    def prepareIdle = { String platform, String scenario, String side, File workDir ->
+        def cache = cacheDirectory(platform, scenario)
+        if (!cache.directory) {
+            throw new GradleException("Missing world cache at ${cache}. Run generatePerfBaselines first.")
+        }
+        def spec = loadScenario(scenario)
+        if (side == "server") {
+            copyTreeExcludingLock(cache, new File(workDir, "world"))
+            writeServerProperties(workDir, spec)
+        } else {
+            copyTreeExcludingLock(cache, new File(workDir, "saves/${scenario}"))
+            new File(workDir, "options.txt").text = """renderDistance:10
+simulationDistance:8
+maxFps:260
+enableVsync:false
+fullscreen:false
+graphicsMode:1
+entityShadows:true
+tutorialStep:none
+"""
+        }
+    }
+    def cacheWorld = { String platform, String scenario, String side ->
+        def worldDir = new File(runDirectory(platform, side), "world")
+        if (!worldDir.directory) {
+            throw new GradleException("Minecraft did not produce ${worldDir}")
+        }
+        copyTreeExcludingLock(worldDir, cacheDirectory(platform, scenario))
+        logger.lifecycle("Cached {} / {} -> {}", platform, scenario, cacheDirectory(platform, scenario))
+    }
+
+    perfPlatforms.each { platform ->
+        def proj = project(":${platform}")
+        def serverDir = runDirectory(platform, "server")
+        def clientDir = runDirectory(platform, "client")
+        perfScenarios.each { scenario ->
+            proj.tasks.named("runPerfGenerate${camel(scenario)}").configure { task ->
+                task.doFirst {
+                    serverDir.mkdirs()
+                    writeRequest(platform, scenario, "generate", "server")
+                    prepareGenerate(scenario, serverDir)
+                }
+                task.doLast {
+                    cacheWorld(platform, scenario, "server")
+                }
+            }
+            proj.tasks.named("runPerfIdleServer${camel(scenario)}").configure { task ->
+                task.doFirst {
+                    serverDir.mkdirs()
+                    writeRequest(platform, scenario, "idle", "server")
+                    prepareIdle(platform, scenario, "server", serverDir)
+                }
+            }
+            proj.tasks.named("runPerfIdleClient${camel(scenario)}").configure { task ->
+                task.doFirst {
+                    clientDir.mkdirs()
+                    writeRequest(platform, scenario, "idle", "client")
+                    prepareIdle(platform, scenario, "client", clientDir)
+                }
+            }
+        }
+        proj.tasks.named("runPerfGenerateWalledMountain").configure { mustRunAfter "runPerfGenerateOpenField" }
+        proj.tasks.named("runPerfIdleServerWalledMountain").configure { mustRunAfter "runPerfIdleServerOpenField" }
+    }
+
+    def selectedPlatforms = findProperty("perf.platform") ? [findProperty("perf.platform").toString()] : perfPlatforms
+    def selectedScenarios = findProperty("perf.scenario") ? [findProperty("perf.scenario").toString()] : perfScenarios
+
+    tasks.register("generatePerfBaselines") {
+        group = "performance"
+        description = "Generate gitignored world caches for both loaders and scenarios."
+        selectedPlatforms.each { platform ->
+            selectedScenarios.each { scenario ->
+                dependsOn ":${platform}:runPerfGenerate${camel(scenario)}"
+            }
+        }
+    }
+
+    tasks.register("runIdleServerBaseline") {
+        group = "performance"
+        description = "Copy cached worlds and run idle dedicated-server baselines with JFR and MSPT."
+        selectedPlatforms.each { platform ->
+            selectedScenarios.each { scenario ->
+                dependsOn ":${platform}:runPerfIdleServer${camel(scenario)}"
+            }
+        }
+    }
+
+    tasks.register("runIdleClientBaseline") {
+        group = "performance"
+        description = "Copy a cached world and run the idle singleplayer client baseline."
+        dependsOn ":${selectedPlatforms[0]}:runPerfIdleClient${camel(selectedScenarios[0])}"
+    }
+
+    tasks.register("runIdleBaseline") {
+        group = "performance"
+        description = "Run idle server baselines for every selected loader and scenario."
+        dependsOn "runIdleServerBaseline"
+    }
+}

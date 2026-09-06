@@ -29,10 +29,42 @@ Fabric 与 NeoForge 的两个场景都必须达到目标才发布 `0.1.0`。任�
 
 ## 可复现世界
 
-两个场景提交固定种子、结构文件和初始化数据。开发者本地首次生成基线存档后将其放入 Git 忽略的缓存目录；后续测试复制干净基线，不重新生成世界，也不将完整世界存档提交到 Git。
+两个场景提交固定种子、结构文件和初始化数据，见 `perf/scenarios/`：
+
+| 场景 | 目录 | 种子 | 结构 | 初始化 |
+| --- | --- | ---: | --- | --- |
+| 开阔地推进 | `perf/scenarios/open-field` | 20211001 | `origin.nbt` 与方向标记 | 超平坦平原、时间 18000、关闭自然刷新与昼夜 |
+| 围墙山体基地 | `perf/scenarios/walled-mountain` | 20211001 | `walled_compound.nbt`（含 64 个黑曜石挖掘点）、`mountain.nbt` | 同上，出生点在围墙内 |
+
+完整世界缓存不提交到 Git。开发者本地生成一次，之后每次测试都复制干净基线：
+
+```text
+./gradlew generatePerfBaselines
+```
+
+缓存目录是 Git 忽略的 `perf/cache/<loader>/<scenario>/world/`。结构 NBT 可用 `python perf/tools/write_structures.py` 重新生成。
+
+## 空载基线
+
+默认测量窗口为 20 秒预热 + 10 分钟（12000 tick），模拟距离 8、视距 10。不要把十分钟运行放进 CI。
+
+```text
+./gradlew runIdleServerBaseline
+./gradlew runIdleClientBaseline -Pperf.platform=fabric -Pperf.scenario=open-field
+```
+
+缩短本地冒烟（PowerShell 给带点号的 `-P` 参数加引号）：
+
+```text
+./gradlew runIdleServerBaseline "-Pperf.platform=fabric" "-Pperf.scenario=open-field" "-Pperf.warmupTicks=20" "-Pperf.durationTicks=100"
+```
+
+结果写到 `perf/results/<loader>-<scenario>-<mode>-<timestamp>/metrics.json`，并附带 Minecraft 原生 JFR `recording.jfr`。
+
+服务端堆内存默认 8 GB，可用 `-Pperf.xmx=8G` 覆盖。
 
 ## 数据采集
 
-- 服务端使用 Java/Minecraft 原生 JFR，不安装性能分析 Mod。
-- 客户端使用外部帧时间工具记录平均 FPS 与 P95 帧时间。
+- 服务端使用 Minecraft 原生 JFR（`JvmProfiler`），不安装 Spark 或其他性能分析 Mod。MSPT 平均与 P95 由模组在 `-Dtheyarebillions.perf.mode=idle` 时按 tick 采样写入 `metrics.json`。
+- 客户端优先用 PresentMon 记录 `msBetweenPresents`：`perf/tools/capture-presentmon.ps1 -OutputCsv perf/results/frames.csv -DurationSeconds 600`。未安装 PresentMon 时，同一 idle 客户端运行会把平均 FPS 与 P95 帧时间写入 `metrics.json`。
 - `/theyarebillions status` 记录测试时的尸潮成员、普通 Zombie、玩家群组、活动票据、共享路线、挖掘点和性能调节档位。

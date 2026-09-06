@@ -1,0 +1,36 @@
+{
+  "id": "open-field",
+  "name": "开阔地推进",
+  "seed": 20211001,
+  "levelType": "minecraft:flat",
+  "generatorSettings": {
+    "biome": "minecraft:plains",
+    "layers": [
+      {"block": "minecraft:bedrock", "height": 1},
+      {"block": "minecraft:dirt", "height": 2},
+      {"block": "minecraft:grass_block", "height": 1}
+    ],
+    "structure_overrides": [],
+    "lakes": false,
+    "features": false
+  },
+  "spawn": {"x": 0, "y": -60, "z": 0, "yaw": 0.0, "pitch": 20.0},
+  "time": 18000,
+  "weather": "clear",
+  "gameMode": "survival",
+  "difficulty": "hard",
+  "viewDistance": 10,
+  "simulationDistance": 8,
+  "structures": ["origin.nbt"],
+  "datapack": "datapack",
+  "gameRules": {
+    "doDaylightCycle": false,
+    "doWeatherCycle": false,
+    "doMobSpawning": false,
+    "doPatrolSpawning": false,
+    "doTraderSpawning": false,
+    "doWardenSpawning": false,
+    "announceAdvancements": false,
+    "spawnRadius": 0
+  }
+}

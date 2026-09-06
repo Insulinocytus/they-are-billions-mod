@@ -5,3 +5,6 @@ run/
 */run/
 .idea/
 *.iml
+perf/cache/
+perf/runs/
+perf/results/

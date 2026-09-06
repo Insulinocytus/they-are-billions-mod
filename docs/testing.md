@@ -4,7 +4,7 @@
 
 GitHub Actions 使用 Java 21 构建 common、Fabric 与 NeoForge，运行单元测试，并确认两个加载器的发布 JAR 均能产出。
 
-性能基准不在共享 CI 中判定通过或失败；它使用固定硬件和 `docs/performance.md` 中的可复现世界手动运行。
+性能基准不在共享 CI 中判定通过或失败；它使用固定硬件和 `docs/performance.md` 中的可复现世界手动运行。`generatePerfBaselines`、`runIdleServerBaseline` 和 `runIdleClientBaseline` 只在开发者机器上执行。CI 仍运行场景文件与 MSPT/P95 计算的单元测试。
 
 ## 单元测试
 

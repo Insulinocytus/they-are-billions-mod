@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.insulinocytus.theyarebillions.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [],
+  "client": [
+    "MinecraftFrameSamplerMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
