@@ -1,10 +1,12 @@
 package com.insulinocytus.theyarebillions.horde;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.DoubleSupplier;
 import java.util.stream.Collectors;
 
@@ -62,12 +64,14 @@ public final class HordePlanner {
         List<GroupPlan> groupPlans = new ArrayList<>(groups.size());
         for (int i = 0; i < groups.size(); i++) {
             PlayerGroup group = groups.get(i);
+            double direction = nightState.directions().get(group.key());
+            PlayerRef anchor = group.anchor(direction);
             groupPlans.add(new GroupPlan(
                     group.key(),
                     new Sector(
-                            group.originX(),
-                            group.originZ(),
-                            nightState.directions().get(group.key()),
+                            anchor.x(),
+                            anchor.z(),
+                            direction,
                             SPAWN_RANGE_MIN,
                             SPAWN_RANGE_MAX),
                     shares[i],
@@ -128,10 +132,22 @@ public final class HordePlanner {
         }
         Map<String, Double> previousDirections =
                 previous.worldDay() == worldDay ? previous.directions() : Map.of();
-        Map<String, Double> directions = new LinkedHashMap<>();
+        List<Set<String>> previousIds = new ArrayList<>(previousDirections.size());
+        List<Double> previousValues = new ArrayList<>(previousDirections.size());
+        for (Map.Entry<String, Double> entry : previousDirections.entrySet()) {
+            previousIds.add(idsOf(entry.getKey()));
+            previousValues.add(entry.getValue());
+        }
+        List<Set<String>> currentIds = new ArrayList<>(groups.size());
         for (PlayerGroup group : groups) {
-            Double existing = previousDirections.get(group.key());
-            directions.put(group.key(), existing != null ? existing : newDirectionRadians.getAsDouble());
+            currentIds.add(group.ids());
+        }
+        Map<String, Double> directions = new LinkedHashMap<>();
+        for (int i = 0; i < groups.size(); i++) {
+            int match = continuedGroup(currentIds, previousIds, i);
+            directions.put(
+                    groups.get(i).key(),
+                    match >= 0 ? previousValues.get(match) : newDirectionRadians.getAsDouble());
         }
         int rotation = previous.worldDay() == worldDay ? previous.rotation() + 1 : 0;
         return new NightState(worldDay, directions, rotation);
@@ -183,6 +199,33 @@ public final class HordePlanner {
         return quotas;
     }
 
+    private static int continuedGroup(List<Set<String>> currentIds, List<Set<String>> previousIds, int current) {
+        int match = -1;
+        Set<String> ids = currentIds.get(current);
+        for (int previous = 0; previous < previousIds.size(); previous++) {
+            if (Collections.disjoint(ids, previousIds.get(previous))) {
+                continue;
+            }
+            if (match >= 0) {
+                return -1;
+            }
+            match = previous;
+        }
+        if (match < 0) {
+            return -1;
+        }
+        for (int other = 0; other < currentIds.size(); other++) {
+            if (other != current && !Collections.disjoint(currentIds.get(other), previousIds.get(match))) {
+                return -1;
+            }
+        }
+        return match;
+    }
+
+    private static Set<String> idsOf(String key) {
+        return Set.of(key.split(","));
+    }
+
     private static boolean withinGroupRange(PlayerRef left, PlayerRef right) {
         double dx = left.x() - right.x();
         double dy = left.y() - right.y();
@@ -219,17 +262,37 @@ public final class HordePlanner {
         return Math.floorDiv(dayTime, DAY_LENGTH);
     }
 
-    private record PlayerGroup(String key, double originX, double originZ) {
+    private record PlayerGroup(List<PlayerRef> members) {
+        PlayerGroup {
+            members = List.copyOf(members);
+        }
+
         static PlayerGroup of(List<PlayerRef> members) {
-            String key = members.stream().map(PlayerRef::id).collect(Collectors.joining(","));
-            double x = 0.0;
-            double z = 0.0;
-            for (PlayerRef member : members) {
-                x += member.x();
-                z += member.z();
+            return new PlayerGroup(members);
+        }
+
+        String key() {
+            return members.stream().map(PlayerRef::id).collect(Collectors.joining(","));
+        }
+
+        Set<String> ids() {
+            return members.stream().map(PlayerRef::id).collect(Collectors.toUnmodifiableSet());
+        }
+
+        PlayerRef anchor(double directionRadians) {
+            double cos = Math.cos(directionRadians);
+            double sin = Math.sin(directionRadians);
+            PlayerRef best = members.getFirst();
+            double bestProj = best.x() * cos + best.z() * sin;
+            for (int i = 1; i < members.size(); i++) {
+                PlayerRef member = members.get(i);
+                double proj = member.x() * cos + member.z() * sin;
+                if (proj > bestProj) {
+                    best = member;
+                    bestProj = proj;
+                }
             }
-            int n = members.size();
-            return new PlayerGroup(key, x / n, z / n);
+            return best;
         }
     }
 

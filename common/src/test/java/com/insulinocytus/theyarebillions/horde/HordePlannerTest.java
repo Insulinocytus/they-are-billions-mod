@@ -202,19 +202,21 @@ class HordePlannerTest {
     }
 
     @Test
-    void spawnOriginIsGroupCentroid() {
+    void spawnOriginIsOutermostMemberAlongDirection() {
         HordePlanner.Plan plan = HordePlanner.plan(
                 snapshot(
                         18000,
                         1000,
                         0,
-                        List.of(player("a", 0, 0), player("b", 10, 0)),
+                        List.of(player("a", 0, 0), player("b", 100, 0), player("c", 200, 0)),
                         HordePlanner.NightState.none()),
-                directions(0.3));
+                directions(0.0));
         HordePlanner.Sector sector = plan.sector();
         assertNotNull(sector);
-        assertEquals(5.0, sector.originX());
+        assertEquals(200.0, sector.originX());
         assertEquals(0.0, sector.originZ());
+        assertTrue(sector.containsBlockCenter(328, 0));
+        assertFalse(sector.containsBlockCenter(228, 0));
     }
 
     @Test
@@ -325,6 +327,42 @@ class HordePlannerTest {
         assertEquals(1000, plan.desiredCount());
         assertEquals(4, plan.successfulSpawnLimit());
         assertEquals(600, plan.groups().getFirst().remainingBudget());
+    }
+
+    @Test
+    void keepsDirectionWhenMemberLeaves() {
+        HordePlanner.Plan together = HordePlanner.plan(
+                snapshot(
+                        18000,
+                        1000,
+                        0,
+                        List.of(player("a", 0, 0), player("b", 10, 0)),
+                        HordePlanner.NightState.none()),
+                directions(1.25));
+        HordePlanner.Plan remaining = HordePlanner.plan(
+                snapshot(18100, 1000, 0, List.of(player("a", 0, 0)), together.night()),
+                NO_NEW_DIRECTION);
+        assertEquals(1, remaining.groups().size());
+        assertEquals("a", remaining.groups().getFirst().key());
+        assertEquals(1.25, remaining.groups().getFirst().sector().directionRadians());
+    }
+
+    @Test
+    void keepsDirectionWhenMemberJoins() {
+        HordePlanner.Plan alone = HordePlanner.plan(
+                snapshot(18000, 1000, 0, List.of(player("a", 0, 0)), HordePlanner.NightState.none()),
+                directions(1.25));
+        HordePlanner.Plan joined = HordePlanner.plan(
+                snapshot(
+                        18100,
+                        1000,
+                        0,
+                        List.of(player("a", 0, 0), player("b", 10, 0)),
+                        alone.night()),
+                NO_NEW_DIRECTION);
+        assertEquals(1, joined.groups().size());
+        assertEquals("a,b", joined.groups().getFirst().key());
+        assertEquals(1.25, joined.groups().getFirst().sector().directionRadians());
     }
 
     @Test
