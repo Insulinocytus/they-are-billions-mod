@@ -2,10 +2,7 @@ package com.insulinocytus.theyarebillions.horde;
 
 import com.insulinocytus.theyarebillions.HordeSpawnAccess;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
-import java.util.UUID;
 import java.util.function.IntPredicate;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
@@ -23,8 +20,6 @@ import net.minecraft.world.level.levelgen.Heightmap;
 public final class HordeSpawner {
     // ponytail: in-memory night directions; persist in SavedData when restarts must keep them
     private static HordePlanner.NightState night = HordePlanner.NightState.none();
-    // ponytail: pending until entity ticks or despawns; #8 tickets shrink this window
-    private static final Set<UUID> pendingHordeIds = new HashSet<>();
 
     private HordeSpawner() {
     }
@@ -62,7 +57,6 @@ public final class HordeSpawner {
         if (!level.addFreshEntity(zombie)) {
             return false;
         }
-        pendingHordeIds.add(zombie.getUUID());
         return true;
     }
 
@@ -168,24 +162,20 @@ public final class HordeSpawner {
 
     private static int countOrdinaryZombies(MinecraftServer server) {
         int ticking = 0;
-        Set<UUID> loadedUnticked = new HashSet<>();
         for (ServerLevel level : server.getAllLevels()) {
             for (Entity entity : level.getAllEntities()) {
-                if (!HordeIdentity.isOrdinaryZombie(entity)) {
-                    continue;
-                }
-                if (level.isPositionEntityTicking(entity.blockPosition())) {
+                boolean ordinaryZombie = HordeIdentity.isOrdinaryZombie(entity);
+                boolean positionEntityTicking =
+                        ordinaryZombie && level.isPositionEntityTicking(entity.blockPosition());
+                if (countsTowardBudget(ordinaryZombie, positionEntityTicking)) {
                     ticking++;
-                } else {
-                    loadedUnticked.add(entity.getUUID());
                 }
             }
         }
-        return ordinaryZombieBudget(ticking, pendingHordeIds, loadedUnticked);
+        return ticking;
     }
 
-    static int ordinaryZombieBudget(int tickingCount, Set<UUID> pending, Set<UUID> loadedUnticked) {
-        pending.retainAll(loadedUnticked);
-        return tickingCount + pending.size();
+    static boolean countsTowardBudget(boolean ordinaryZombie, boolean positionEntityTicking) {
+        return ordinaryZombie && positionEntityTicking;
     }
 }

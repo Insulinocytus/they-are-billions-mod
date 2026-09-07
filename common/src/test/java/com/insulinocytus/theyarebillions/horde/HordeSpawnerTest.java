@@ -1,23 +1,17 @@
 package com.insulinocytus.theyarebillions.horde;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.util.HashSet;
-import java.util.Set;
-import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 class HordeSpawnerTest {
     @Test
-    void budgetCountsTickingZombiesPlusPendingUntickedHordeOnly() {
-        UUID pending = UUID.fromString("00000000-0000-0000-0000-000000000001");
-        UUID gone = UUID.fromString("00000000-0000-0000-0000-000000000002");
-        UUID nowTicking = UUID.fromString("00000000-0000-0000-0000-000000000003");
-        Set<UUID> pendingIds = new HashSet<>(Set.of(pending, gone, nowTicking));
-        int budget = HordeSpawner.ordinaryZombieBudget(5, pendingIds, Set.of(pending));
-        assertEquals(6, budget);
-        assertEquals(Set.of(pending), pendingIds);
+    void onlyTickingOrdinaryZombiesCountTowardBudget() {
+        assertTrue(HordeSpawner.countsTowardBudget(true, true));
+        assertFalse(HordeSpawner.countsTowardBudget(true, false));
+        assertFalse(HordeSpawner.countsTowardBudget(false, true));
     }
 
     @Test
