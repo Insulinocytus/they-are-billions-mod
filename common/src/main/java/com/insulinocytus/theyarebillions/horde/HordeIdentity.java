@@ -27,7 +27,9 @@ public final class HordeIdentity {
     }
 
     public static boolean isHordeMember(Entity entity) {
-        return isOrdinaryZombie(entity) && entity.getTags().contains(HORDE_TAG);
+        return isOrdinaryZombie(entity)
+                && (entity instanceof HordeMemberState state && state.theyarebillions$isSyncedHordeMember()
+                || entity.getTags().contains(HORDE_TAG));
     }
 
     public static boolean hasPersistentHordeTag(Entity entity) {
@@ -44,6 +46,7 @@ public final class HordeIdentity {
 
     public static void mark(Entity entity) {
         entity.addTag(HORDE_TAG);
+        syncClientState(entity);
     }
 
     public static void enforceHordeTraits(Zombie zombie) {
@@ -61,6 +64,13 @@ public final class HordeIdentity {
     public static void detachIfNamed(Entity entity) {
         if (isHordeMember(entity) && entity.hasCustomName()) {
             entity.removeTag(HORDE_TAG);
+            syncClientState(entity);
+        }
+    }
+
+    public static void syncClientState(Entity entity) {
+        if (isOrdinaryZombie(entity) && entity instanceof HordeMemberState state) {
+            state.theyarebillions$setSyncedHordeMember(entity.getTags().contains(HORDE_TAG));
         }
     }
 }

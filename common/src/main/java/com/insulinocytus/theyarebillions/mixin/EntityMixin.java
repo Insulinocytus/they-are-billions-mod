@@ -18,6 +18,8 @@ public abstract class EntityMixin {
 
     @Inject(method = "load", at = @At("RETURN"))
     private void theyarebillions$detachLoadedNamedHorde(CompoundTag nbt, CallbackInfo ci) {
-        HordeIdentity.detachIfNamed((Entity) (Object) this);
+        Entity entity = (Entity) (Object) this;
+        HordeIdentity.detachIfNamed(entity);
+        HordeIdentity.syncClientState(entity);
     }
 }

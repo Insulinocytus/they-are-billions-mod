@@ -13,6 +13,8 @@
     "ZombieMixin"
   ],
   "client": [
+    "AbstractZombieModelMixin",
+    "EntityRenderDispatcherMixin",
     "MinecraftFrameSamplerMixin"
   ],
   "injectors": {

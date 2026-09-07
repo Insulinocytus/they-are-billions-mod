@@ -27,6 +27,10 @@ public final class HordeGameTests {
         helper.assertTrue(HordeIdentity.isOrdinaryZombie(zombie), "vanilla zombie should exist");
         helper.assertTrue(HordeIdentity.isHordeMember(zombie), "zombie should carry horde tag");
         helper.assertTrue(HordeIdentity.hasPersistentHordeTag(zombie), "horde tag should persist in NBT");
+        helper.assertTrue(zombie instanceof HordeMemberState, "zombie should expose synchronized horde state");
+        helper.assertTrue(
+                ((HordeMemberState) zombie).theyarebillions$isSyncedHordeMember(),
+                "horde state should be available to clients through vanilla entity data");
         helper.assertTrue(!zombie.isPersistenceRequired(), "horde tag must not force persistence");
         helper.assertTrue(!zombie.isBaby(), "horde members are adults");
         helper.assertTrue(!zombie.canPickUpLoot(), "horde members cannot pick up items");
@@ -56,6 +60,9 @@ public final class HordeGameTests {
         zombie.setCustomName(Component.literal("Pat"));
         helper.assertTrue(!HordeIdentity.isHordeMember(zombie), "naming must remove the horde mark");
         helper.assertTrue(!HordeIdentity.hasPersistentHordeTag(zombie), "naming must drop the persistent horde tag");
+        helper.assertTrue(
+                !((HordeMemberState) zombie).theyarebillions$isSyncedHordeMember(),
+                "naming must clear synchronized horde state");
         helper.assertTrue(zombie.canPickUpLoot(), "named zombies restore pickup");
         zombie.setBaby(true);
         helper.assertTrue(zombie.isBaby(), "named zombies can be babies");
