@@ -7,6 +7,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.monster.Zombie;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.common.util.FakePlayer;
 import net.neoforged.neoforge.event.EventHooks;
@@ -44,7 +45,11 @@ public final class HordeSpawnAccessImpl {
 
     public static boolean finalizeHordeSpawn(Mob mob, ServerLevel level) {
         EventHooks.finalizeMobSpawn(
-                mob, level, level.getCurrentDifficultyAt(mob.blockPosition()), MobSpawnType.EVENT, null);
+                mob,
+                level,
+                level.getCurrentDifficultyAt(mob.blockPosition()),
+                MobSpawnType.EVENT,
+                new Zombie.ZombieGroupData(false, false));
         return !mob.isSpawnCancelled();
     }
 }

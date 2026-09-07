@@ -16,7 +16,7 @@ Draft PR 不运行检查；Ready PR 后续每次 push 会重新验证最新提�
 
 ## Unit Tests
 
-当前使用 JUnit 验证模组版本握手、性能工具的设置/采样/场景文件/汇总计算，以及确定性尸潮规划。
+当前使用 JUnit 验证模组版本握手、性能工具的设置/采样/场景文件/汇总计算、确定性尸潮规划，以及尸潮标记生命周期与原版生成接管范围。
 
 ## JAR Packaging Checks
 
@@ -24,7 +24,7 @@ Fabric 与 NeoForge 的 Platform Build 分别检查最终 JAR 是否存在，并
 
 ## Server Integration Tests
 
-Fabric 与 NeoForge 分别运行 GameTest Server（`runGameTestServer`）。当前覆盖验证模组能生成带持久化尸潮标记的原版 Zombie。
+Fabric 与 NeoForge 分别运行 GameTest Server（`runGameTestServer`）。当前覆盖验证模组能生成带持久化尸潮标记的原版 Zombie，以及尸潮身份、命名脱离、死亡掉落和显式生成不被接管。
 
 ## Client Startup Smoke Tests
 

@@ -1,5 +1,6 @@
 package com.insulinocytus.theyarebillions.mixin;
 
+import com.insulinocytus.theyarebillions.horde.HordeIdentity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
@@ -22,14 +23,8 @@ public abstract class SpawnPlacementsMixin {
             BlockPos pos,
             RandomSource random,
             CallbackInfoReturnable<Boolean> cir) {
-        if (type == EntityType.ZOMBIE && isTakenOver(spawnType)) {
+        if (type == EntityType.ZOMBIE && HordeIdentity.takesOverNaturalPopulation(spawnType.name())) {
             cir.setReturnValue(false);
         }
-    }
-
-    private static boolean isTakenOver(MobSpawnType spawnType) {
-        return spawnType == MobSpawnType.NATURAL
-                || spawnType == MobSpawnType.CHUNK_GENERATION
-                || spawnType == MobSpawnType.REINFORCEMENT;
     }
 }
