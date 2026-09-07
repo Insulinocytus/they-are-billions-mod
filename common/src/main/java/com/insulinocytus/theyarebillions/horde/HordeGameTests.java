@@ -51,6 +51,20 @@ public final class HordeGameTests {
         helper.succeed();
     }
 
+    public static void removingHordeTagRestoresServerBehavior(GameTestHelper helper) {
+        Zombie zombie = spawnHordeMember(helper, new BlockPos(2, 2, 2));
+        zombie.removeTag(HordeIdentity.HORDE_TAG);
+        helper.assertTrue(
+                ((HordeMemberState) zombie).theyarebillions$isSyncedHordeMember(),
+                "test requires a stale client-only horde state");
+        helper.assertFalse(HordeIdentity.isHordeMember(zombie), "server identity must use only the horde tag");
+        zombie.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.DIAMOND));
+        helper.assertTrue(
+                !zombie.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty(),
+                "removing the tag must restore server behavior");
+        helper.succeed();
+    }
+
     public static void namingRemovesHordeMarkAndRestoresVanillaBehavior(GameTestHelper helper) {
         Zombie zombie = spawnHordeMember(helper, new BlockPos(2, 2, 2));
         zombie.setCanPickUpLoot(true);

@@ -32,7 +32,8 @@ public abstract class AbstractZombieModelMixin {
         if (HordeAnimationCache.reuseIfCurrent(
                 zombie,
                 (HumanoidModel<?>) (Object) this,
-                sampleIntervalTicks)) {
+                sampleIntervalTicks,
+                ageInTicks)) {
             ci.cancel();
         }
     }
@@ -54,6 +55,7 @@ public abstract class AbstractZombieModelMixin {
         HordeAnimationCache.captureIfNeeded(
                 zombie,
                 (HumanoidModel<?>) (Object) this,
-                HordeClientRendering.animationSampleIntervalTicks(zombie));
+                HordeClientRendering.animationSampleIntervalTicks(zombie),
+                ageInTicks);
     }
 }

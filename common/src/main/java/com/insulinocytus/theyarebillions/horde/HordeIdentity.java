@@ -27,9 +27,13 @@ public final class HordeIdentity {
     }
 
     public static boolean isHordeMember(Entity entity) {
+        return isOrdinaryZombie(entity) && entity.getTags().contains(HORDE_TAG);
+    }
+
+    public static boolean isClientHordeMember(Entity entity) {
         return isOrdinaryZombie(entity)
-                && (entity instanceof HordeMemberState state && state.theyarebillions$isSyncedHordeMember()
-                || entity.getTags().contains(HORDE_TAG));
+                && entity instanceof HordeMemberState state
+                && state.theyarebillions$isSyncedHordeMember();
     }
 
     public static boolean hasPersistentHordeTag(Entity entity) {
