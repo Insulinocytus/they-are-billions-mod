@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
@@ -97,7 +96,7 @@ class HordePlannerTest {
                 snapshot(true, false, 18000, 1000, 0, List.of(player("p", 12.5, -8.25)), seeded("p", 1.25)),
                 NO_NEW_DIRECTION);
         assertTrue(plan.shouldSpawn());
-        HordePlanner.Sector sector = plan.sector();
+        HordePlanner.Sector sector = plan.groups().getFirst().sector();
         assertNotNull(sector);
         assertEquals(12.5, sector.originX());
         assertEquals(-8.25, sector.originZ());
@@ -113,8 +112,8 @@ class HordePlannerTest {
     }
 
     @Test
-    void omitsSpawnSectorWhenNotSpawning() {
-        assertNull(plan(0, 1000, 0).sector());
+    void omitsGroupsWhenNotSpawning() {
+        assertTrue(plan(0, 1000, 0).groups().isEmpty());
     }
 
     @Test
@@ -218,8 +217,7 @@ class HordePlannerTest {
                         List.of(player("a", 0, 0), player("b", 100, 0), player("c", 200, 0)),
                         HordePlanner.NightState.none()),
                 directions(0.0));
-        HordePlanner.Sector sector = plan.sector();
-        assertNotNull(sector);
+        HordePlanner.Sector sector = plan.groups().getFirst().sector();
         assertEquals(200.0, sector.originX());
         assertEquals(0.0, sector.originZ());
         assertTrue(sector.containsBlockCenter(328, 0));
@@ -451,6 +449,40 @@ class HordePlannerTest {
                 NO_NEW_DIRECTION);
 
         assertEquals(1.5, resetDayTime.groups().getFirst().sector().directionRadians());
+    }
+
+    @Test
+    void repeatingDuskTimeSetInOneWorldDayKeepsDirection() {
+        HordePlanner.Plan first = HordePlanner.plan(
+                snapshot(18000, 1000, 0, List.of(player("p", 0, 0)), HordePlanner.NightState.none()),
+                directions(1.5));
+        HordePlanner.Plan beforeDusk = HordePlanner.plan(
+                snapshot(12999, 1000, 0, List.of(player("p", 0, 0)), first.night()), NO_NEW_DIRECTION);
+        HordePlanner.Plan duskAgain = HordePlanner.plan(
+                snapshot(13000, 1000, 0, List.of(player("p", 0, 0)), beforeDusk.night()), NO_NEW_DIRECTION);
+        HordePlanner.Plan afterDuskAgain = HordePlanner.plan(
+                snapshot(13005, 1000, 0, List.of(player("p", 0, 0)), duskAgain.night()), NO_NEW_DIRECTION);
+        beforeDusk = HordePlanner.plan(
+                snapshot(12999, 1000, 0, List.of(player("p", 0, 0)), afterDuskAgain.night()), NO_NEW_DIRECTION);
+        HordePlanner.Plan secondDuskAgain = HordePlanner.plan(
+                snapshot(13000, 1000, 0, List.of(player("p", 0, 0)), beforeDusk.night()), NO_NEW_DIRECTION);
+        HordePlanner.Plan afterSecondDuskAgain = HordePlanner.plan(
+                snapshot(13005, 1000, 0, List.of(player("p", 0, 0)), secondDuskAgain.night()), NO_NEW_DIRECTION);
+
+        assertEquals(1.5, afterDuskAgain.groups().getFirst().sector().directionRadians());
+        assertEquals(1.5, afterSecondDuskAgain.groups().getFirst().sector().directionRadians());
+    }
+
+    @Test
+    void timeAddToNextNightReselectsDirection() {
+        HordePlanner.Plan first = HordePlanner.plan(
+                snapshot(18000, 1000, 0, List.of(player("p", 0, 0)), HordePlanner.NightState.none()),
+                directions(1.5));
+        HordePlanner.Plan nextNight = HordePlanner.plan(
+                snapshot(42000, 1000, 0, List.of(player("p", 0, 0)), first.night()), directions(2.25));
+
+        assertEquals(2.25, nextNight.groups().getFirst().sector().directionRadians());
+        assertNotEquals(1.5, nextNight.groups().getFirst().sector().directionRadians());
     }
 
     @Test

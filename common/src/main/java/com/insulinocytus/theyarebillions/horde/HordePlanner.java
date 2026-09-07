@@ -125,11 +125,13 @@ public final class HordePlanner {
             List<PlayerGroup> groups,
             boolean night,
             DoubleSupplier newDirectionRadians) {
-        boolean newNight = startsNewNight(previous.observedDayTime(), dayTime);
+        long nightIdentity = nightIdentity(dayTime);
+        boolean newNight = night && nightIdentity > previous.initializedNight();
         Map<GroupIdentity, Double> previousDirections = newNight ? Map.of() : previous.directions();
         int previousRotation = newNight ? 0 : previous.rotation();
+        long initializedNight = newNight ? nightIdentity : previous.initializedNight();
         if (!night || groups.isEmpty()) {
-            return new NightState(dayTime, previousDirections, previousRotation);
+            return new NightState(dayTime, previousDirections, previousRotation, initializedNight);
         }
         List<GroupIdentity> currentIdentities = groups.stream().map(PlayerGroup::identity).toList();
         Map<GroupIdentity, Double> directions = new LinkedHashMap<>();
@@ -141,24 +143,16 @@ public final class HordePlanner {
                     continuedDirection != null ? continuedDirection : newDirectionRadians.getAsDouble());
         }
         int rotation = newNight || previous.observedDayTime() == UNOBSERVED_DAY_TIME ? 0 : previous.rotation() + 1;
-        return new NightState(dayTime, directions, rotation);
+        return new NightState(dayTime, directions, rotation, initializedNight);
     }
 
     private static NightState observeTime(NightState previous, long dayTime) {
-        boolean newNight = startsNewNight(previous.observedDayTime(), dayTime);
-        return new NightState(
-                dayTime,
-                newNight ? Map.of() : previous.directions(),
-                newNight ? 0 : previous.rotation());
+        return new NightState(dayTime, previous.directions(), previous.rotation(), previous.initializedNight());
     }
 
-    private static boolean startsNewNight(long previousDayTime, long dayTime) {
-        // This planner is observed once per server tick. Only a continuous dusk crossing starts a new night;
-        // command/sleep time jumps are discontinuities and keep the current direction until the next natural dusk.
-        if (previousDayTime == UNOBSERVED_DAY_TIME || dayTime != previousDayTime + 1) {
-            return false;
-        }
-        return dayTimeOfDay(previousDayTime) == NIGHT_START - 1 && dayTimeOfDay(dayTime) == NIGHT_START;
+    private static long nightIdentity(long dayTime) {
+        long day = Math.floorDiv(dayTime, DAY_LENGTH);
+        return dayTimeOfDay(dayTime) < NIGHT_START ? day - 1 : day;
     }
 
     private static int[] evenSplit(int remaining, int groups, int rotation) {
@@ -330,9 +324,14 @@ public final class HordePlanner {
     public record PlayerRef(String id, double x, double y, double z) {
     }
 
-    public record NightState(long observedDayTime, Map<GroupIdentity, Double> directions, int rotation) {
+    public record NightState(
+            long observedDayTime, Map<GroupIdentity, Double> directions, int rotation, long initializedNight) {
         public NightState {
             directions = Map.copyOf(directions);
+        }
+
+        public NightState(long observedDayTime, Map<GroupIdentity, Double> directions, int rotation) {
+            this(observedDayTime, directions, rotation, nightIdentity(observedDayTime));
         }
 
         public NightState(long observedDayTime, Map<GroupIdentity, Double> directions) {
@@ -340,7 +339,7 @@ public final class HordePlanner {
         }
 
         public static NightState none() {
-            return new NightState(UNOBSERVED_DAY_TIME, Map.of());
+            return new NightState(UNOBSERVED_DAY_TIME, Map.of(), 0, UNOBSERVED_DAY_TIME);
         }
     }
 
@@ -382,9 +381,6 @@ public final class HordePlanner {
             return successfulSpawnLimit > 0 && !groups.isEmpty();
         }
 
-        public Sector sector() {
-            return groups.isEmpty() ? null : groups.getFirst().sector();
-        }
     }
 
     public record Sector(
