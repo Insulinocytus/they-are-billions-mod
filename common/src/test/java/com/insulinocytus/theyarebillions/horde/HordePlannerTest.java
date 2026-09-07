@@ -437,6 +437,23 @@ class HordePlannerTest {
     }
 
     @Test
+    void timeSetMidnightKeepsDirectionAfterSeveralWorldDays() {
+        HordePlanner.Plan lateWorldNight = HordePlanner.plan(
+                snapshot(
+                        5 * 24000L + 18000,
+                        1000,
+                        0,
+                        List.of(player("p", 0, 0)),
+                        HordePlanner.NightState.none()),
+                directions(1.5));
+        HordePlanner.Plan resetDayTime = HordePlanner.plan(
+                snapshot(18000, 1000, 0, List.of(player("p", 0, 0)), lateWorldNight.night()),
+                NO_NEW_DIRECTION);
+
+        assertEquals(1.5, resetDayTime.groups().getFirst().sector().directionRadians());
+    }
+
+    @Test
     void splitAfterMergeDoesNotRestoreOldDirections() {
         HordePlanner.Plan split = HordePlanner.plan(
                 snapshot(
@@ -462,23 +479,25 @@ class HordePlannerTest {
     }
 
     @Test
-    void newWorldDayReselectsDirection() {
+    void naturalNextNightReselectsDirection() {
         HordePlanner.Plan night = HordePlanner.plan(
                 snapshot(18000, 1000, 0, List.of(player("p", 0, 0)), HordePlanner.NightState.none()),
                 directions(1.5));
-        HordePlanner.Plan morning = HordePlanner.plan(
-                snapshot(24000, 1000, 0, List.of(player("p", 0, 0)), night.night()),
+        HordePlanner.Plan beforeNextNight = HordePlanner.plan(
+                snapshot(24000 + 12999, 1000, 0, List.of(player("p", 0, 0)), night.night()),
                 NO_NEW_DIRECTION);
-        HordePlanner.Plan nextNight = HordePlanner.plan(
-                snapshot(24000 + 18000, 1000, 0, List.of(player("p", 0, 0)), morning.night()),
+        HordePlanner.Plan nextNightStart = HordePlanner.plan(
+                snapshot(24000 + 13000, 1000, 0, List.of(player("p", 0, 0)), beforeNextNight.night()),
                 directions(2.25));
+        HordePlanner.Plan nextNight = HordePlanner.plan(
+                snapshot(24000 + 13005, 1000, 0, List.of(player("p", 0, 0)), nextNightStart.night()),
+                NO_NEW_DIRECTION);
         assertEquals(2.25, nextNight.groups().getFirst().sector().directionRadians());
         assertNotEquals(1.5, nextNight.groups().getFirst().sector().directionRadians());
     }
 
     private static HordePlanner.Plan plan(long dayTime, int target, int ordinaryZombies) {
         String id = "p";
-        long worldDay = Math.floorDiv(dayTime, 24000L);
         return HordePlanner.plan(
                 snapshot(
                         true,
@@ -487,7 +506,7 @@ class HordePlannerTest {
                         target,
                         ordinaryZombies,
                         List.of(player(id, 0, 0)),
-                        new HordePlanner.NightState(worldDay, Map.of(HordePlanner.GroupIdentity.of(id), 0.0))),
+                        new HordePlanner.NightState(dayTime, Map.of(HordePlanner.GroupIdentity.of(id), 0.0))),
                 NO_NEW_DIRECTION);
     }
 
@@ -520,7 +539,7 @@ class HordePlannerTest {
     }
 
     private static HordePlanner.NightState seeded(String key, double direction) {
-        return new HordePlanner.NightState(0, Map.of(HordePlanner.GroupIdentity.of(key), direction));
+        return new HordePlanner.NightState(18000, Map.of(HordePlanner.GroupIdentity.of(key), direction));
     }
 
     private static DoubleSupplier directions(double... values) {

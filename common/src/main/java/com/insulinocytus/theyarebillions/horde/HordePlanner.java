@@ -20,6 +20,7 @@ public final class HordePlanner {
     public static final int SPAWN_RANGE_MAX = 144;
     public static final int GROUP_RANGE = 128;
     private static final long DAY_LENGTH = 24000L;
+    private static final long UNOBSERVED_DAY_TIME = Long.MIN_VALUE;
 
     private HordePlanner() {
     }
@@ -38,13 +39,13 @@ public final class HordePlanner {
     }
 
     public static Plan plan(Snapshot snapshot, DoubleSupplier newDirectionRadians) {
-        long worldDay = worldDay(snapshot.dayTime());
+        long dayTime = snapshot.dayTime();
         if (!snapshot.overworld()) {
-            return Plan.none(retainOrReset(snapshot.night(), worldDay));
+            return Plan.none(observeTime(snapshot.night(), dayTime));
         }
-        boolean night = isHordeNight(snapshot.dayTime());
+        boolean night = isHordeNight(dayTime);
         List<PlayerGroup> groups = night ? connectedGroups(snapshot.validPlayers()) : List.of();
-        NightState nightState = nextNightState(snapshot.night(), worldDay, groups, night, newDirectionRadians);
+        NightState nightState = nextNightState(snapshot.night(), dayTime, groups, night, newDirectionRadians);
         int target = Math.clamp(snapshot.hordeTarget(), MIN_TARGET, MAX_TARGET);
         if (!night || snapshot.peaceful() || snapshot.validPlayers().isEmpty() || target == 0) {
             return Plan.none(nightState);
@@ -120,15 +121,16 @@ public final class HordePlanner {
 
     private static NightState nextNightState(
             NightState previous,
-            long worldDay,
+            long dayTime,
             List<PlayerGroup> groups,
             boolean night,
             DoubleSupplier newDirectionRadians) {
+        boolean newNight = startsNewNight(previous.observedDayTime(), dayTime);
+        Map<GroupIdentity, Double> previousDirections = newNight ? Map.of() : previous.directions();
+        int previousRotation = newNight ? 0 : previous.rotation();
         if (!night || groups.isEmpty()) {
-            return retainOrReset(previous, worldDay);
+            return new NightState(dayTime, previousDirections, previousRotation);
         }
-        Map<GroupIdentity, Double> previousDirections =
-                previous.worldDay() == worldDay ? previous.directions() : Map.of();
         List<GroupIdentity> currentIdentities = groups.stream().map(PlayerGroup::identity).toList();
         Map<GroupIdentity, Double> directions = new LinkedHashMap<>();
         for (int i = 0; i < groups.size(); i++) {
@@ -138,15 +140,25 @@ public final class HordePlanner {
                     identity,
                     continuedDirection != null ? continuedDirection : newDirectionRadians.getAsDouble());
         }
-        int rotation = previous.worldDay() == worldDay ? previous.rotation() + 1 : 0;
-        return new NightState(worldDay, directions, rotation);
+        int rotation = newNight || previous.observedDayTime() == UNOBSERVED_DAY_TIME ? 0 : previous.rotation() + 1;
+        return new NightState(dayTime, directions, rotation);
     }
 
-    private static NightState retainOrReset(NightState previous, long worldDay) {
-        if (previous.worldDay() == worldDay) {
-            return previous;
+    private static NightState observeTime(NightState previous, long dayTime) {
+        boolean newNight = startsNewNight(previous.observedDayTime(), dayTime);
+        return new NightState(
+                dayTime,
+                newNight ? Map.of() : previous.directions(),
+                newNight ? 0 : previous.rotation());
+    }
+
+    private static boolean startsNewNight(long previousDayTime, long dayTime) {
+        // This planner is observed once per server tick. Only a continuous dusk crossing starts a new night;
+        // command/sleep time jumps are discontinuities and keep the current direction until the next natural dusk.
+        if (previousDayTime == UNOBSERVED_DAY_TIME || dayTime != previousDayTime + 1) {
+            return false;
         }
-        return new NightState(worldDay, Map.of());
+        return dayTimeOfDay(previousDayTime) == NIGHT_START - 1 && dayTimeOfDay(dayTime) == NIGHT_START;
     }
 
     private static int[] evenSplit(int remaining, int groups, int rotation) {
@@ -246,10 +258,6 @@ public final class HordePlanner {
         return (int) Math.floorMod(dayTime, DAY_LENGTH);
     }
 
-    private static long worldDay(long dayTime) {
-        return Math.floorDiv(dayTime, DAY_LENGTH);
-    }
-
     private record PlayerGroup(List<PlayerRef> members, GroupIdentity identity) {
         PlayerGroup {
             members = List.copyOf(members);
@@ -322,17 +330,17 @@ public final class HordePlanner {
     public record PlayerRef(String id, double x, double y, double z) {
     }
 
-    public record NightState(long worldDay, Map<GroupIdentity, Double> directions, int rotation) {
+    public record NightState(long observedDayTime, Map<GroupIdentity, Double> directions, int rotation) {
         public NightState {
             directions = Map.copyOf(directions);
         }
 
-        public NightState(long worldDay, Map<GroupIdentity, Double> directions) {
-            this(worldDay, directions, 0);
+        public NightState(long observedDayTime, Map<GroupIdentity, Double> directions) {
+            this(observedDayTime, directions, 0);
         }
 
         public static NightState none() {
-            return new NightState(Long.MIN_VALUE, Map.of());
+            return new NightState(UNOBSERVED_DAY_TIME, Map.of());
         }
     }
 
