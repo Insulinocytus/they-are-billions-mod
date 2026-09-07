@@ -2,11 +2,15 @@ package com.insulinocytus.theyarebillions.neoforge;
 
 import com.insulinocytus.theyarebillions.TheyAreBillions;
 import com.insulinocytus.theyarebillions.horde.HordeGameTests;
+import com.insulinocytus.theyarebillions.horde.HordeIdentity;
 import com.insulinocytus.theyarebillions.horde.HordeSpawner;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.Difficulty;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.level.block.Blocks;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.common.NeoForge;
@@ -41,6 +45,31 @@ public final class HordeSpawnGameTests {
     @GameTest(template = "empty")
     public static void ordinaryZombieNaturalPopulationStaysTakenOver(GameTestHelper helper) {
         HordeGameTests.ordinaryZombieNaturalPopulationStaysTakenOver(helper);
+    }
+
+    @GameTest(template = "empty")
+    public static void namingDuringFinalizeKeepsVanillaTraits(GameTestHelper helper) {
+        helper.getLevel().getServer().setDifficulty(Difficulty.NORMAL, true);
+        helper.setBlock(new BlockPos(2, 1, 2), Blocks.GRASS_BLOCK);
+        BlockPos feet = helper.absolutePos(new BlockPos(2, 2, 2));
+        NameBabyDuringFinalize listener = new NameBabyDuringFinalize();
+        NeoForge.EVENT_BUS.register(listener);
+        try {
+            helper.assertTrue(
+                    HordeSpawner.spawnHordeMember(helper.getLevel(), feet),
+                    "spawn should succeed after naming");
+        } finally {
+            NeoForge.EVENT_BUS.unregister(listener);
+        }
+        Zombie zombie = null;
+        for (Zombie candidate : helper.getEntities(EntityType.ZOMBIE)) {
+            zombie = candidate;
+            break;
+        }
+        helper.assertTrue(zombie != null, "vanilla zombie should exist");
+        helper.assertTrue(!HordeIdentity.isHordeMember(zombie), "naming during finalize must remove the horde mark");
+        helper.assertTrue(zombie.isBaby(), "named zombies keep baby state from finalize");
+        helper.succeed();
     }
 
     @GameTest(template = "empty")
@@ -89,6 +118,14 @@ public final class HordeSpawnGameTests {
         @SubscribeEvent
         public void deny(FinalizeSpawnEvent event) {
             event.setSpawnCancelled(true);
+        }
+    }
+
+    public static final class NameBabyDuringFinalize {
+        @SubscribeEvent
+        public void name(FinalizeSpawnEvent event) {
+            event.getEntity().setCustomName(Component.literal("Pat"));
+            event.setSpawnData(new Zombie.ZombieGroupData(true, false));
         }
     }
 }

@@ -6,6 +6,7 @@ import net.minecraft.nbt.Tag;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.item.ItemStack;
 
@@ -15,14 +16,10 @@ public final class HordeIdentity {
     private HordeIdentity() {
     }
 
-    public static boolean retainsHordeMark(boolean marked, boolean named) {
-        return marked && !named;
-    }
-
-    public static boolean takesOverNaturalPopulation(String spawnTypeName) {
-        return "NATURAL".equals(spawnTypeName)
-                || "CHUNK_GENERATION".equals(spawnTypeName)
-                || "REINFORCEMENT".equals(spawnTypeName);
+    public static boolean takesOverNaturalPopulation(MobSpawnType spawnType) {
+        return spawnType == MobSpawnType.NATURAL
+                || spawnType == MobSpawnType.CHUNK_GENERATION
+                || spawnType == MobSpawnType.REINFORCEMENT;
     }
 
     public static boolean isOrdinaryZombie(Entity entity) {
@@ -49,7 +46,10 @@ public final class HordeIdentity {
         entity.addTag(HORDE_TAG);
     }
 
-    public static void applySpawnIdentity(Zombie zombie) {
+    public static void enforceHordeTraits(Zombie zombie) {
+        if (!isHordeMember(zombie)) {
+            return;
+        }
         zombie.setBaby(false);
         for (EquipmentSlot slot : EquipmentSlot.values()) {
             if (slot != EquipmentSlot.BODY) {
@@ -59,7 +59,7 @@ public final class HordeIdentity {
     }
 
     public static void detachIfNamed(Entity entity) {
-        if (isHordeMember(entity) && !retainsHordeMark(true, entity.hasCustomName())) {
+        if (isHordeMember(entity) && entity.hasCustomName()) {
             entity.removeTag(HORDE_TAG);
         }
     }

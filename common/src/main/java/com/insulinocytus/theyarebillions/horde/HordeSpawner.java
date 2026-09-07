@@ -51,7 +51,7 @@ public final class HordeSpawner {
             zombie.discard();
             return false;
         }
-        HordeIdentity.applySpawnIdentity(zombie);
+        HordeIdentity.enforceHordeTraits(zombie);
         return level.addFreshEntity(zombie);
     }
 

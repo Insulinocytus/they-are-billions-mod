@@ -23,7 +23,7 @@ public abstract class SpawnPlacementsMixin {
             BlockPos pos,
             RandomSource random,
             CallbackInfoReturnable<Boolean> cir) {
-        if (type == EntityType.ZOMBIE && HordeIdentity.takesOverNaturalPopulation(spawnType.name())) {
+        if (type == EntityType.ZOMBIE && HordeIdentity.takesOverNaturalPopulation(spawnType)) {
             cir.setReturnValue(false);
         }
     }
