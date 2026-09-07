@@ -1,14 +1,11 @@
 package com.insulinocytus.theyarebillions.horde;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.DoubleSupplier;
-import java.util.stream.Collectors;
 
 public final class HordePlanner {
     public static final int DEFAULT_TARGET = 1000;
@@ -64,10 +61,10 @@ public final class HordePlanner {
         List<GroupPlan> groupPlans = new ArrayList<>(groups.size());
         for (int i = 0; i < groups.size(); i++) {
             PlayerGroup group = groups.get(i);
-            double direction = nightState.directions().get(group.key());
+            double direction = nightState.directions().get(group.identity());
             PlayerRef anchor = group.anchor(direction);
             groupPlans.add(new GroupPlan(
-                    group.key(),
+                    group.identity(),
                     new Sector(
                             anchor.x(),
                             anchor.z(),
@@ -117,7 +114,7 @@ public final class HordePlanner {
             members.sort(Comparator.comparing(PlayerRef::id));
             groups.add(PlayerGroup.of(members));
         }
-        groups.sort(Comparator.comparing(PlayerGroup::key));
+        groups.sort(Comparator.comparing(PlayerGroup::identity));
         return groups;
     }
 
@@ -130,24 +127,16 @@ public final class HordePlanner {
         if (!night || groups.isEmpty()) {
             return retainOrReset(previous, worldDay);
         }
-        Map<String, Double> previousDirections =
+        Map<GroupIdentity, Double> previousDirections =
                 previous.worldDay() == worldDay ? previous.directions() : Map.of();
-        List<Set<String>> previousIds = new ArrayList<>(previousDirections.size());
-        List<Double> previousValues = new ArrayList<>(previousDirections.size());
-        for (Map.Entry<String, Double> entry : previousDirections.entrySet()) {
-            previousIds.add(idsOf(entry.getKey()));
-            previousValues.add(entry.getValue());
-        }
-        List<Set<String>> currentIds = new ArrayList<>(groups.size());
-        for (PlayerGroup group : groups) {
-            currentIds.add(group.ids());
-        }
-        Map<String, Double> directions = new LinkedHashMap<>();
+        List<GroupIdentity> currentIdentities = groups.stream().map(PlayerGroup::identity).toList();
+        Map<GroupIdentity, Double> directions = new LinkedHashMap<>();
         for (int i = 0; i < groups.size(); i++) {
-            int match = continuedGroup(currentIds, previousIds, i);
+            GroupIdentity identity = groups.get(i).identity();
+            Double continuedDirection = continuedDirection(currentIdentities, previousDirections, i);
             directions.put(
-                    groups.get(i).key(),
-                    match >= 0 ? previousValues.get(match) : newDirectionRadians.getAsDouble());
+                    identity,
+                    continuedDirection != null ? continuedDirection : newDirectionRadians.getAsDouble());
         }
         int rotation = previous.worldDay() == worldDay ? previous.rotation() + 1 : 0;
         return new NightState(worldDay, directions, rotation);
@@ -199,31 +188,30 @@ public final class HordePlanner {
         return quotas;
     }
 
-    private static int continuedGroup(List<Set<String>> currentIds, List<Set<String>> previousIds, int current) {
-        int match = -1;
-        Set<String> ids = currentIds.get(current);
-        for (int previous = 0; previous < previousIds.size(); previous++) {
-            if (Collections.disjoint(ids, previousIds.get(previous))) {
+    private static Double continuedDirection(
+            List<GroupIdentity> currentIdentities,
+            Map<GroupIdentity, Double> previousDirections,
+            int current) {
+        GroupIdentity identity = currentIdentities.get(current);
+        GroupIdentity match = null;
+        for (GroupIdentity previous : previousDirections.keySet()) {
+            if (!identity.overlaps(previous)) {
                 continue;
             }
-            if (match >= 0) {
-                return -1;
+            if (match != null) {
+                return null;
             }
             match = previous;
         }
-        if (match < 0) {
-            return -1;
+        if (match == null) {
+            return null;
         }
-        for (int other = 0; other < currentIds.size(); other++) {
-            if (other != current && !Collections.disjoint(currentIds.get(other), previousIds.get(match))) {
-                return -1;
+        for (int other = 0; other < currentIdentities.size(); other++) {
+            if (other != current && currentIdentities.get(other).overlaps(match)) {
+                return null;
             }
         }
-        return match;
-    }
-
-    private static Set<String> idsOf(String key) {
-        return Set.of(key.split(","));
+        return previousDirections.get(match);
     }
 
     private static boolean withinGroupRange(PlayerRef left, PlayerRef right) {
@@ -262,21 +250,14 @@ public final class HordePlanner {
         return Math.floorDiv(dayTime, DAY_LENGTH);
     }
 
-    private record PlayerGroup(List<PlayerRef> members) {
+    private record PlayerGroup(List<PlayerRef> members, GroupIdentity identity) {
         PlayerGroup {
             members = List.copyOf(members);
         }
 
         static PlayerGroup of(List<PlayerRef> members) {
-            return new PlayerGroup(members);
-        }
-
-        String key() {
-            return members.stream().map(PlayerRef::id).collect(Collectors.joining(","));
-        }
-
-        Set<String> ids() {
-            return members.stream().map(PlayerRef::id).collect(Collectors.toUnmodifiableSet());
+            List<PlayerRef> copy = List.copyOf(members);
+            return new PlayerGroup(copy, new GroupIdentity(copy.stream().map(PlayerRef::id).toList()));
         }
 
         PlayerRef anchor(double directionRadians) {
@@ -296,15 +277,57 @@ public final class HordePlanner {
         }
     }
 
+    public record GroupIdentity(List<String> memberIds) implements Comparable<GroupIdentity> {
+        public GroupIdentity {
+            memberIds = memberIds.stream().distinct().sorted().toList();
+            if (memberIds.isEmpty()) {
+                throw new IllegalArgumentException("group identity must contain at least one member");
+            }
+        }
+
+        public static GroupIdentity of(String... memberIds) {
+            return new GroupIdentity(List.of(memberIds));
+        }
+
+        boolean overlaps(GroupIdentity other) {
+            int left = 0;
+            int right = 0;
+            while (left < memberIds.size() && right < other.memberIds.size()) {
+                int compared = memberIds.get(left).compareTo(other.memberIds.get(right));
+                if (compared == 0) {
+                    return true;
+                }
+                if (compared < 0) {
+                    left++;
+                } else {
+                    right++;
+                }
+            }
+            return false;
+        }
+
+        @Override
+        public int compareTo(GroupIdentity other) {
+            int common = Math.min(memberIds.size(), other.memberIds.size());
+            for (int i = 0; i < common; i++) {
+                int compared = memberIds.get(i).compareTo(other.memberIds.get(i));
+                if (compared != 0) {
+                    return compared;
+                }
+            }
+            return Integer.compare(memberIds.size(), other.memberIds.size());
+        }
+    }
+
     public record PlayerRef(String id, double x, double y, double z) {
     }
 
-    public record NightState(long worldDay, Map<String, Double> directions, int rotation) {
+    public record NightState(long worldDay, Map<GroupIdentity, Double> directions, int rotation) {
         public NightState {
             directions = Map.copyOf(directions);
         }
 
-        public NightState(long worldDay, Map<String, Double> directions) {
+        public NightState(long worldDay, Map<GroupIdentity, Double> directions) {
             this(worldDay, directions, 0);
         }
 
@@ -326,7 +349,7 @@ public final class HordePlanner {
         }
     }
 
-    public record GroupPlan(String key, Sector sector, int remainingBudget, int spawnQuota) {
+    public record GroupPlan(GroupIdentity identity, Sector sector, int remainingBudget, int spawnQuota) {
     }
 
     public record Plan(

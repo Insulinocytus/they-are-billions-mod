@@ -156,7 +156,7 @@ class HordePlannerTest {
                         HordePlanner.NightState.none()),
                 directions(0.5));
         assertEquals(1, plan.groups().size());
-        assertEquals("a,b", plan.groups().getFirst().key());
+        assertEquals(HordePlanner.GroupIdentity.of("a", "b"), plan.groups().getFirst().identity());
     }
 
     @Test
@@ -170,8 +170,8 @@ class HordePlannerTest {
                         HordePlanner.NightState.none()),
                 directions(0.1, 0.2));
         assertEquals(2, plan.groups().size());
-        assertEquals("a", plan.groups().get(0).key());
-        assertEquals("b", plan.groups().get(1).key());
+        assertEquals(HordePlanner.GroupIdentity.of("a"), plan.groups().get(0).identity());
+        assertEquals(HordePlanner.GroupIdentity.of("b"), plan.groups().get(1).identity());
     }
 
     @Test
@@ -185,7 +185,14 @@ class HordePlannerTest {
                         HordePlanner.NightState.none()),
                 directions(1.0));
         assertEquals(1, plan.groups().size());
-        assertEquals("a,b,c", plan.groups().getFirst().key());
+        assertEquals(HordePlanner.GroupIdentity.of("a", "b", "c"), plan.groups().getFirst().identity());
+    }
+
+    @Test
+    void groupIdentityIsStructuralAndCanonical() {
+        HordePlanner.GroupIdentity identity = HordePlanner.GroupIdentity.of("b", "a");
+        assertEquals(List.of("a", "b"), identity.memberIds());
+        assertEquals(HordePlanner.GroupIdentity.of("a", "b"), identity);
     }
 
     @Test
@@ -343,7 +350,7 @@ class HordePlannerTest {
                 snapshot(18100, 1000, 0, List.of(player("a", 0, 0)), together.night()),
                 NO_NEW_DIRECTION);
         assertEquals(1, remaining.groups().size());
-        assertEquals("a", remaining.groups().getFirst().key());
+        assertEquals(HordePlanner.GroupIdentity.of("a"), remaining.groups().getFirst().identity());
         assertEquals(1.25, remaining.groups().getFirst().sector().directionRadians());
     }
 
@@ -361,7 +368,7 @@ class HordePlannerTest {
                         alone.night()),
                 NO_NEW_DIRECTION);
         assertEquals(1, joined.groups().size());
-        assertEquals("a,b", joined.groups().getFirst().key());
+        assertEquals(HordePlanner.GroupIdentity.of("a", "b"), joined.groups().getFirst().identity());
         assertEquals(1.25, joined.groups().getFirst().sector().directionRadians());
     }
 
@@ -480,7 +487,7 @@ class HordePlannerTest {
                         target,
                         ordinaryZombies,
                         List.of(player(id, 0, 0)),
-                        new HordePlanner.NightState(worldDay, Map.of(id, 0.0))),
+                        new HordePlanner.NightState(worldDay, Map.of(HordePlanner.GroupIdentity.of(id), 0.0))),
                 NO_NEW_DIRECTION);
     }
 
@@ -513,7 +520,7 @@ class HordePlannerTest {
     }
 
     private static HordePlanner.NightState seeded(String key, double direction) {
-        return new HordePlanner.NightState(0, Map.of(key, direction));
+        return new HordePlanner.NightState(0, Map.of(HordePlanner.GroupIdentity.of(key), direction));
     }
 
     private static DoubleSupplier directions(double... values) {
