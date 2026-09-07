@@ -2,9 +2,6 @@ package com.insulinocytus.theyarebillions.horde;
 
 import com.insulinocytus.theyarebillions.HordeSpawnAccess;
 import net.minecraft.core.BlockPos;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.ListTag;
-import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -18,8 +15,6 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.levelgen.Heightmap;
 
 public final class HordeSpawner {
-    public static final String HORDE_TAG = "theyarebillions.horde";
-
     // ponytail: one overworld in-memory night direction; persist in SavedData when restarts must keep it
     private static boolean wasNight;
     private static double nightSpawnDirectionRadians;
@@ -29,22 +24,6 @@ public final class HordeSpawner {
 
     public static void onServerTick(MinecraftServer server) {
         tick(server, server.overworld());
-    }
-
-    public static boolean isHordeMember(Entity entity) {
-        return entity.getType() == EntityType.ZOMBIE && entity.getTags().contains(HORDE_TAG);
-    }
-
-    public static boolean hasPersistentHordeTag(Entity entity) {
-        CompoundTag nbt = new CompoundTag();
-        entity.saveWithoutId(nbt);
-        ListTag tags = nbt.getList("Tags", Tag.TAG_STRING);
-        for (int i = 0; i < tags.size(); i++) {
-            if (HORDE_TAG.equals(tags.getString(i))) {
-                return true;
-            }
-        }
-        return false;
     }
 
     public static boolean spawnHordeMember(ServerLevel level, BlockPos pos) {
@@ -67,11 +46,12 @@ public final class HordeSpawner {
             zombie.discard();
             return false;
         }
+        HordeIdentity.mark(zombie);
         if (!HordeSpawnAccess.finalizeHordeSpawn(zombie, level)) {
             zombie.discard();
             return false;
         }
-        zombie.addTag(HORDE_TAG);
+        HordeIdentity.applySpawnIdentity(zombie);
         return level.addFreshEntity(zombie);
     }
 
@@ -144,7 +124,7 @@ public final class HordeSpawner {
         int count = 0;
         for (ServerLevel level : server.getAllLevels()) {
             for (Entity entity : level.getAllEntities()) {
-                if (entity.getType() == EntityType.ZOMBIE) {
+                if (HordeIdentity.isOrdinaryZombie(entity)) {
                     count++;
                 }
             }

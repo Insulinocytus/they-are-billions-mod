@@ -9,4 +9,24 @@ public final class HordeSpawnGameTests {
     public void taggedVanillaZombieSpawns(GameTestHelper helper) {
         HordeGameTests.taggedVanillaZombieSpawns(helper);
     }
+
+    @GameTest(template = HordeGameTests.EMPTY_TEMPLATE)
+    public void hordeMemberDeathDropsNothing(GameTestHelper helper) {
+        HordeGameTests.hordeMemberDeathDropsNothing(helper);
+    }
+
+    @GameTest(template = HordeGameTests.EMPTY_TEMPLATE)
+    public void namingRemovesHordeMarkAndRestoresVanillaBehavior(GameTestHelper helper) {
+        HordeGameTests.namingRemovesHordeMarkAndRestoresVanillaBehavior(helper);
+    }
+
+    @GameTest(template = HordeGameTests.EMPTY_TEMPLATE)
+    public void explicitSpawnsStayVanilla(GameTestHelper helper) {
+        HordeGameTests.explicitSpawnsStayVanilla(helper);
+    }
+
+    @GameTest(template = HordeGameTests.EMPTY_TEMPLATE)
+    public void ordinaryZombieNaturalPopulationStaysTakenOver(GameTestHelper helper) {
+        HordeGameTests.ordinaryZombieNaturalPopulationStaysTakenOver(helper);
+    }
 }

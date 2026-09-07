@@ -24,6 +24,26 @@ public final class HordeSpawnGameTests {
     }
 
     @GameTest(template = "empty")
+    public static void hordeMemberDeathDropsNothing(GameTestHelper helper) {
+        HordeGameTests.hordeMemberDeathDropsNothing(helper);
+    }
+
+    @GameTest(template = "empty")
+    public static void namingRemovesHordeMarkAndRestoresVanillaBehavior(GameTestHelper helper) {
+        HordeGameTests.namingRemovesHordeMarkAndRestoresVanillaBehavior(helper);
+    }
+
+    @GameTest(template = "empty")
+    public static void explicitSpawnsStayVanilla(GameTestHelper helper) {
+        HordeGameTests.explicitSpawnsStayVanilla(helper);
+    }
+
+    @GameTest(template = "empty")
+    public static void ordinaryZombieNaturalPopulationStaysTakenOver(GameTestHelper helper) {
+        HordeGameTests.ordinaryZombieNaturalPopulationStaysTakenOver(helper);
+    }
+
+    @GameTest(template = "empty")
     public static void spawnPlacementCheckFailBlocksSpawn(GameTestHelper helper) {
         assertEventBlocksSpawn(helper, new FailSpawnPlacement(), "SpawnPlacementCheck FAIL should block spawn");
     }
