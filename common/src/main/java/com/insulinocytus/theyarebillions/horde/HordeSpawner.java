@@ -1,6 +1,8 @@
 package com.insulinocytus.theyarebillions.horde;
 
 import com.insulinocytus.theyarebillions.HordeSpawnAccess;
+import java.util.ArrayList;
+import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -20,9 +22,8 @@ import net.minecraft.world.level.levelgen.Heightmap;
 public final class HordeSpawner {
     public static final String HORDE_TAG = "theyarebillions.horde";
 
-    // ponytail: one overworld in-memory night direction; persist in SavedData when restarts must keep it
-    private static boolean wasNight;
-    private static double nightSpawnDirectionRadians;
+    // ponytail: in-memory night directions; persist in SavedData when restarts must keep them
+    private static HordePlanner.NightState night = HordePlanner.NightState.none();
 
     private HordeSpawner() {
     }
@@ -80,22 +81,17 @@ public final class HordeSpawner {
             return;
         }
         long dayTime = level.getDayTime();
-        boolean night = HordePlanner.isHordeNight(dayTime);
-        if (night && !wasNight) {
-            nightSpawnDirectionRadians = level.random.nextDouble() * (Math.PI * 2.0);
-        }
-        wasNight = night;
-        ServerPlayer player = findValidPlayer(level);
-        HordePlanner.Plan plan = HordePlanner.plan(new HordePlanner.Snapshot(
-                true,
-                level.getDifficulty() == Difficulty.PEACEFUL,
-                player != null,
-                dayTime,
-                HordeGameRules.target(level),
-                countOrdinaryZombies(server),
-                player == null ? 0.0 : player.getX(),
-                player == null ? 0.0 : player.getZ(),
-                nightSpawnDirectionRadians));
+        HordePlanner.Plan plan = HordePlanner.plan(
+                new HordePlanner.Snapshot(
+                        true,
+                        level.getDifficulty() == Difficulty.PEACEFUL,
+                        dayTime,
+                        HordeGameRules.target(level),
+                        countOrdinaryZombies(server),
+                        validPlayers(level),
+                        night),
+                () -> level.random.nextDouble() * (Math.PI * 2.0));
+        night = plan.night();
         if (!plan.shouldSpawn()) {
             return;
         }
@@ -103,15 +99,37 @@ public final class HordeSpawner {
     }
 
     private static void execute(ServerLevel level, HordePlanner.Plan plan) {
+        List<HordePlanner.GroupPlan> groups = plan.groups();
+        int[] remainingQuota = new int[groups.size()];
+        for (int i = 0; i < groups.size(); i++) {
+            remainingQuota[i] = groups.get(i).spawnQuota();
+        }
         int spawned = 0;
         int failed = 0;
+        int index = 0;
         while (spawned < plan.successfulSpawnLimit() && failed < plan.failedAttemptLimit()) {
-            if (trySpawnInSector(level, plan.sector())) {
+            int chosen = nextGroup(remainingQuota, index);
+            if (trySpawnInSector(level, groups.get(chosen).sector())) {
                 spawned++;
             } else {
                 failed++;
             }
+            if (remainingQuota[chosen] > 0) {
+                remainingQuota[chosen]--;
+            }
+            index = chosen + 1;
         }
+    }
+
+    private static int nextGroup(int[] remainingQuota, int start) {
+        int n = remainingQuota.length;
+        for (int offset = 0; offset < n; offset++) {
+            int index = Math.floorMod(start + offset, n);
+            if (remainingQuota[index] > 0) {
+                return index;
+            }
+        }
+        return Math.floorMod(start, n);
     }
 
     private static boolean trySpawnInSector(ServerLevel level, HordePlanner.Sector sector) {
@@ -127,24 +145,32 @@ public final class HordeSpawner {
         return spawnHordeMember(level, new BlockPos(blockX, y, blockZ));
     }
 
-    private static ServerPlayer findValidPlayer(ServerLevel level) {
+    private static List<HordePlanner.PlayerRef> validPlayers(ServerLevel level) {
+        List<HordePlanner.PlayerRef> players = new ArrayList<>();
         for (ServerPlayer player : level.players()) {
-            if (HordeSpawnAccess.isFakePlayer(player)) {
+            if (!isValidPlayer(player)) {
                 continue;
             }
-            GameType mode = player.gameMode.getGameModeForPlayer();
-            if (mode == GameType.SURVIVAL || mode == GameType.ADVENTURE) {
-                return player;
-            }
+            players.add(new HordePlanner.PlayerRef(
+                    player.getUUID().toString(), player.getX(), player.getY(), player.getZ()));
         }
-        return null;
+        return players;
+    }
+
+    private static boolean isValidPlayer(ServerPlayer player) {
+        GameType mode = player.gameMode.getGameModeForPlayer();
+        return HordePlanner.isValidPlayer(
+                HordeSpawnAccess.isFakePlayer(player),
+                mode == GameType.SURVIVAL,
+                mode == GameType.ADVENTURE);
     }
 
     private static int countOrdinaryZombies(MinecraftServer server) {
         int count = 0;
         for (ServerLevel level : server.getAllLevels()) {
             for (Entity entity : level.getAllEntities()) {
-                if (entity.getType() == EntityType.ZOMBIE) {
+                if (entity.getType() == EntityType.ZOMBIE
+                        && (level.isPositionEntityTicking(entity.blockPosition()) || isHordeMember(entity))) {
                     count++;
                 }
             }
