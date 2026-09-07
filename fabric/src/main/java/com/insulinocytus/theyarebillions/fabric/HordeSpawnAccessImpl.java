@@ -7,6 +7,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.monster.Zombie;
 
 public final class HordeSpawnAccessImpl {
     private HordeSpawnAccessImpl() {
@@ -25,7 +26,11 @@ public final class HordeSpawnAccessImpl {
     }
 
     public static boolean finalizeHordeSpawn(Mob mob, ServerLevel level) {
-        mob.finalizeSpawn(level, level.getCurrentDifficultyAt(mob.blockPosition()), MobSpawnType.EVENT, null);
+        mob.finalizeSpawn(
+                level,
+                level.getCurrentDifficultyAt(mob.blockPosition()),
+                MobSpawnType.EVENT,
+                new Zombie.ZombieGroupData(false, false));
         return true;
     }
 }

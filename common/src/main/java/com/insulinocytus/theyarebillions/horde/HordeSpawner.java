@@ -8,9 +8,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.IntPredicate;
 import net.minecraft.core.BlockPos;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.ListTag;
-import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -24,8 +21,6 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.levelgen.Heightmap;
 
 public final class HordeSpawner {
-    public static final String HORDE_TAG = "theyarebillions.horde";
-
     // ponytail: in-memory night directions; persist in SavedData when restarts must keep them
     private static HordePlanner.NightState night = HordePlanner.NightState.none();
     // ponytail: pending until entity ticks or despawns; #8 tickets shrink this window
@@ -36,22 +31,6 @@ public final class HordeSpawner {
 
     public static void onServerTick(MinecraftServer server) {
         tick(server, server.overworld());
-    }
-
-    public static boolean isHordeMember(Entity entity) {
-        return entity.getType() == EntityType.ZOMBIE && entity.getTags().contains(HORDE_TAG);
-    }
-
-    public static boolean hasPersistentHordeTag(Entity entity) {
-        CompoundTag nbt = new CompoundTag();
-        entity.saveWithoutId(nbt);
-        ListTag tags = nbt.getList("Tags", Tag.TAG_STRING);
-        for (int i = 0; i < tags.size(); i++) {
-            if (HORDE_TAG.equals(tags.getString(i))) {
-                return true;
-            }
-        }
-        return false;
     }
 
     public static boolean spawnHordeMember(ServerLevel level, BlockPos pos) {
@@ -74,11 +53,12 @@ public final class HordeSpawner {
             zombie.discard();
             return false;
         }
+        HordeIdentity.mark(zombie);
         if (!HordeSpawnAccess.finalizeHordeSpawn(zombie, level)) {
             zombie.discard();
             return false;
         }
-        zombie.addTag(HORDE_TAG);
+        HordeIdentity.enforceHordeTraits(zombie);
         if (!level.addFreshEntity(zombie)) {
             return false;
         }
@@ -191,7 +171,7 @@ public final class HordeSpawner {
         Set<UUID> loadedUnticked = new HashSet<>();
         for (ServerLevel level : server.getAllLevels()) {
             for (Entity entity : level.getAllEntities()) {
-                if (entity.getType() != EntityType.ZOMBIE) {
+                if (!HordeIdentity.isOrdinaryZombie(entity)) {
                     continue;
                 }
                 if (level.isPositionEntityTicking(entity.blockPosition())) {
