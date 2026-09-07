@@ -4,9 +4,13 @@
   "package": "com.insulinocytus.theyarebillions.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
+    "EntityMixin",
     "GameRulesAccessor",
     "GameRulesIntegerValueAccessor",
-    "SpawnPlacementsMixin"
+    "LivingEntityMixin",
+    "MobMixin",
+    "SpawnPlacementsMixin",
+    "ZombieMixin"
   ],
   "client": [
     "MinecraftFrameSamplerMixin"
