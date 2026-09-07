@@ -235,6 +235,20 @@ class HordePlannerTest {
     }
 
     @Test
+    void leftoverRemainingBudgetRotatesAcrossTicks() {
+        List<HordePlanner.PlayerRef> players =
+                List.of(player("a", 0, 0), player("b", 1000, 0), player("c", 2000, 0));
+        HordePlanner.Plan first = HordePlanner.plan(
+                snapshot(18000, 1000, 0, players, HordePlanner.NightState.none()),
+                directions(0.1, 0.2, 0.3));
+        HordePlanner.Plan second = HordePlanner.plan(
+                snapshot(18000, 1000, 0, players, first.night()), NO_NEW_DIRECTION);
+        assertEquals(333, second.groups().get(0).remainingBudget());
+        assertEquals(334, second.groups().get(1).remainingBudget());
+        assertEquals(333, second.groups().get(2).remainingBudget());
+    }
+
+    @Test
     void leftoverRemainingBudgetGoesToEarlierGroup() {
         HordePlanner.Plan plan = HordePlanner.plan(
                 snapshot(
@@ -250,6 +264,40 @@ class HordePlannerTest {
         assertEquals(2, plan.groups().get(0).spawnQuota());
         assertEquals(1, plan.groups().get(1).spawnQuota());
         assertEquals(1, plan.groups().get(2).spawnQuota());
+    }
+
+    @Test
+    void tickQuotaRotatesAcrossEqualGroups() {
+        List<HordePlanner.PlayerRef> players = List.of(
+                player("a", 0, 0),
+                player("b", 1000, 0),
+                player("c", 2000, 0),
+                player("d", 3000, 0),
+                player("e", 4000, 0));
+        HordePlanner.NightState night = HordePlanner.NightState.none();
+        int[] totals = new int[5];
+        for (int tick = 0; tick < 5; tick++) {
+            HordePlanner.Plan plan = HordePlanner.plan(
+                    snapshot(18000, 1000, 0, players, night),
+                    tick == 0 ? directions(0.1, 0.2, 0.3, 0.4, 0.5) : NO_NEW_DIRECTION);
+            night = plan.night();
+            for (int i = 0; i < 5; i++) {
+                totals[i] += plan.groups().get(i).spawnQuota();
+            }
+            if (tick == 0) {
+                assertEquals(1, plan.groups().get(0).spawnQuota());
+                assertEquals(0, plan.groups().get(4).spawnQuota());
+            }
+            if (tick == 1) {
+                assertEquals(0, plan.groups().get(0).spawnQuota());
+                assertEquals(1, plan.groups().get(4).spawnQuota());
+            }
+        }
+        assertEquals(4, totals[0]);
+        assertEquals(4, totals[1]);
+        assertEquals(4, totals[2]);
+        assertEquals(4, totals[3]);
+        assertEquals(4, totals[4]);
     }
 
     @Test

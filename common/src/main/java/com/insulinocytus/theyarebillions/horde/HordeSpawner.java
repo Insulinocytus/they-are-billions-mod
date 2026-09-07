@@ -3,6 +3,7 @@ package com.insulinocytus.theyarebillions.horde;
 import com.insulinocytus.theyarebillions.HordeSpawnAccess;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.IntPredicate;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -104,12 +105,22 @@ public final class HordeSpawner {
         for (int i = 0; i < groups.size(); i++) {
             remainingQuota[i] = groups.get(i).spawnQuota();
         }
+        executeAttempts(
+                remainingQuota,
+                Math.floorMod(plan.night().rotation(), groups.size()),
+                plan.successfulSpawnLimit(),
+                plan.failedAttemptLimit(),
+                i -> trySpawnInSector(level, groups.get(i).sector()));
+    }
+
+    static int executeAttempts(
+            int[] remainingQuota, int start, int successLimit, int failLimit, IntPredicate spawn) {
         int spawned = 0;
         int failed = 0;
-        int index = 0;
-        while (spawned < plan.successfulSpawnLimit() && failed < plan.failedAttemptLimit()) {
+        int index = start;
+        while (spawned < successLimit && failed < failLimit) {
             int chosen = nextGroup(remainingQuota, index);
-            if (trySpawnInSector(level, groups.get(chosen).sector())) {
+            if (spawn.test(chosen)) {
                 spawned++;
             } else {
                 failed++;
@@ -119,6 +130,7 @@ public final class HordeSpawner {
             }
             index = chosen + 1;
         }
+        return spawned;
     }
 
     private static int nextGroup(int[] remainingQuota, int start) {

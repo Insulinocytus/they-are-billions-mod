@@ -56,8 +56,9 @@ public final class HordePlanner {
         if (quota == 0) {
             return new Plan(desired, 0, 0, List.of(), nightState);
         }
-        int[] shares = evenSplit(remaining, groups.size());
-        int[] tickQuotas = tickQuotas(shares, quota);
+        int rotation = Math.floorMod(nightState.rotation(), groups.size());
+        int[] shares = evenSplit(remaining, groups.size(), rotation);
+        int[] tickQuotas = tickQuotas(shares, quota, rotation);
         List<GroupPlan> groupPlans = new ArrayList<>(groups.size());
         for (int i = 0; i < groups.size(); i++) {
             PlayerGroup group = groups.get(i);
@@ -132,7 +133,8 @@ public final class HordePlanner {
             Double existing = previousDirections.get(group.key());
             directions.put(group.key(), existing != null ? existing : newDirectionRadians.getAsDouble());
         }
-        return new NightState(worldDay, directions);
+        int rotation = previous.worldDay() == worldDay ? previous.rotation() + 1 : 0;
+        return new NightState(worldDay, directions, rotation);
     }
 
     private static NightState retainOrReset(NightState previous, long worldDay) {
@@ -142,23 +144,27 @@ public final class HordePlanner {
         return new NightState(worldDay, Map.of());
     }
 
-    private static int[] evenSplit(int remaining, int groups) {
+    private static int[] evenSplit(int remaining, int groups, int rotation) {
         int[] shares = new int[groups];
         int base = remaining / groups;
         int extra = remaining % groups;
         for (int i = 0; i < groups; i++) {
-            shares[i] = base + (i < extra ? 1 : 0);
+            shares[i] = base;
+        }
+        for (int i = 0; i < extra; i++) {
+            shares[Math.floorMod(rotation + i, groups)]++;
         }
         return shares;
     }
 
-    private static int[] tickQuotas(int[] shares, int tickLimit) {
+    private static int[] tickQuotas(int[] shares, int tickLimit, int rotation) {
         int n = shares.length;
         int[] quotas = new int[n];
         int[] leftover = shares.clone();
         for (int granted = 0; granted < tickLimit; granted++) {
             int best = -1;
-            for (int i = 0; i < n; i++) {
+            for (int offset = 0; offset < n; offset++) {
+                int i = Math.floorMod(rotation + offset, n);
                 if (leftover[i] <= 0) {
                     continue;
                 }
@@ -230,9 +236,13 @@ public final class HordePlanner {
     public record PlayerRef(String id, double x, double y, double z) {
     }
 
-    public record NightState(long worldDay, Map<String, Double> directions) {
+    public record NightState(long worldDay, Map<String, Double> directions, int rotation) {
         public NightState {
             directions = Map.copyOf(directions);
+        }
+
+        public NightState(long worldDay, Map<String, Double> directions) {
+            this(worldDay, directions, 0);
         }
 
         public static NightState none() {
