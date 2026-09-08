@@ -447,8 +447,18 @@ class HordePlannerTest {
         HordePlanner.Plan resetDayTime = HordePlanner.plan(
                 snapshot(18000, 1000, 0, List.of(player("p", 0, 0)), lateWorldNight.night()),
                 NO_NEW_DIRECTION);
+        HordePlanner.Plan beforeNextNight = HordePlanner.plan(
+                snapshot(24000 + 12999, 1000, 0, List.of(player("p", 0, 0)), resetDayTime.night()),
+                NO_NEW_DIRECTION);
+        HordePlanner.Plan nextNightStart = HordePlanner.plan(
+                snapshot(24000 + 13000, 1000, 0, List.of(player("p", 0, 0)), beforeNextNight.night()),
+                directions(2.25));
+        HordePlanner.Plan nextNight = HordePlanner.plan(
+                snapshot(24000 + 13005, 1000, 0, List.of(player("p", 0, 0)), nextNightStart.night()),
+                NO_NEW_DIRECTION);
 
         assertEquals(1.5, resetDayTime.groups().getFirst().sector().directionRadians());
+        assertEquals(2.25, nextNight.groups().getFirst().sector().directionRadians());
     }
 
     @Test

@@ -129,7 +129,7 @@ public final class HordePlanner {
         boolean newNight = night && nightIdentity > previous.initializedNight();
         Map<GroupIdentity, Double> previousDirections = newNight ? Map.of() : previous.directions();
         int previousRotation = newNight ? 0 : previous.rotation();
-        long initializedNight = newNight ? nightIdentity : previous.initializedNight();
+        long initializedNight = night ? nightIdentity : previous.initializedNight();
         if (!night || groups.isEmpty()) {
             return new NightState(dayTime, previousDirections, previousRotation, initializedNight);
         }

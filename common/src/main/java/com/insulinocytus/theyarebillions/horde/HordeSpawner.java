@@ -18,9 +18,6 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.levelgen.Heightmap;
 
 public final class HordeSpawner {
-    // ponytail: in-memory night directions; persist in SavedData when restarts must keep them
-    private static HordePlanner.NightState night = HordePlanner.NightState.none();
-
     private HordeSpawner() {
     }
 
@@ -64,6 +61,7 @@ public final class HordeSpawner {
         if (level.dimension() != Level.OVERWORLD) {
             return;
         }
+        HordeNightData night = HordeNightData.get(level);
         long dayTime = level.getDayTime();
         HordePlanner.Plan plan = HordePlanner.plan(
                 new HordePlanner.Snapshot(
@@ -73,9 +71,9 @@ public final class HordeSpawner {
                         HordeGameRules.target(level),
                         countOrdinaryZombies(server),
                         validPlayers(level),
-                        night),
+                        night.state()),
                 () -> level.random.nextDouble() * (Math.PI * 2.0));
-        night = plan.night();
+        night.setState(plan.night());
         if (!plan.shouldSpawn()) {
             return;
         }
