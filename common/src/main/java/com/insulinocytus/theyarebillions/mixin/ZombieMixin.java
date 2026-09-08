@@ -1,6 +1,7 @@
 package com.insulinocytus.theyarebillions.mixin;
 
 import com.insulinocytus.theyarebillions.horde.HordeIdentity;
+import com.insulinocytus.theyarebillions.horde.HordeNavigation;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.monster.Zombie;
 import org.spongepowered.asm.mixin.Mixin;
@@ -11,6 +12,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(Zombie.class)
 public abstract class ZombieMixin {
+    @Inject(method = "aiStep", at = @At("TAIL"))
+    private void theyarebillions$followPlayerGroup(CallbackInfo ci) {
+        HordeNavigation.tick((Zombie) (Object) this);
+    }
+
     @Inject(method = "convertsInWater", at = @At("HEAD"), cancellable = true)
     private void theyarebillions$noDrownedConversion(CallbackInfoReturnable<Boolean> cir) {
         if (HordeIdentity.isHordeMember((Entity) (Object) this)) {

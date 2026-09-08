@@ -26,6 +26,11 @@ public final class HordeSpawner {
     }
 
     public static boolean spawnHordeMember(ServerLevel level, BlockPos pos) {
+        return spawnHordeMember(level, pos, null);
+    }
+
+    public static boolean spawnHordeMember(
+            ServerLevel level, BlockPos pos, HordePlanner.GroupIdentity group) {
         if (level.getDifficulty() == Difficulty.PEACEFUL) {
             return false;
         }
@@ -45,7 +50,11 @@ public final class HordeSpawner {
             zombie.discard();
             return false;
         }
-        HordeIdentity.mark(zombie);
+        if (group == null) {
+            HordeIdentity.mark(zombie);
+        } else {
+            HordeIdentity.mark(zombie, group);
+        }
         if (!HordeSpawnAccess.finalizeHordeSpawn(zombie, level)) {
             zombie.discard();
             return false;
@@ -91,7 +100,7 @@ public final class HordeSpawner {
                 Math.floorMod(plan.night().rotation(), groups.size()),
                 plan.successfulSpawnLimit(),
                 plan.failedAttemptLimit(),
-                i -> trySpawnInSector(level, groups.get(i).sector()));
+                i -> trySpawnInSector(level, groups.get(i)));
     }
 
     static int executeAttempts(
@@ -125,7 +134,8 @@ public final class HordeSpawner {
         return Math.floorMod(start, n);
     }
 
-    private static boolean trySpawnInSector(ServerLevel level, HordePlanner.Sector sector) {
+    private static boolean trySpawnInSector(ServerLevel level, HordePlanner.GroupPlan group) {
+        HordePlanner.Sector sector = group.sector();
         double span = sector.maxDistance() - sector.minDistance();
         double distance = sector.minDistance() + level.random.nextDouble() * span;
         int blockX = Mth.floor(sector.originX() + Math.cos(sector.directionRadians()) * distance);
@@ -135,10 +145,10 @@ public final class HordeSpawner {
         }
         level.getChunk(blockX >> 4, blockZ >> 4);
         int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, blockX, blockZ);
-        return spawnHordeMember(level, new BlockPos(blockX, y, blockZ));
+        return spawnHordeMember(level, new BlockPos(blockX, y, blockZ), group.identity());
     }
 
-    private static List<HordePlanner.PlayerRef> validPlayers(ServerLevel level) {
+    static List<HordePlanner.PlayerRef> validPlayers(ServerLevel level) {
         List<HordePlanner.PlayerRef> players = new ArrayList<>();
         for (ServerPlayer player : level.players()) {
             if (!isValidPlayer(player)) {
@@ -150,7 +160,7 @@ public final class HordeSpawner {
         return players;
     }
 
-    private static boolean isValidPlayer(ServerPlayer player) {
+    static boolean isValidPlayer(ServerPlayer player) {
         GameType mode = player.gameMode.getGameModeForPlayer();
         return HordePlanner.isValidPlayer(
                 HordeSpawnAccess.isFakePlayer(player),

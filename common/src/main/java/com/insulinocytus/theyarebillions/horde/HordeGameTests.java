@@ -37,6 +37,21 @@ public final class HordeGameTests {
         helper.succeed();
     }
 
+    public static void hordeMemberKeepsItsPlayerGroup(GameTestHelper helper) {
+        helper.getLevel().getServer().setDifficulty(Difficulty.NORMAL, true);
+        prepareGrass(helper);
+        HordePlanner.GroupIdentity group = HordePlanner.GroupIdentity.of(
+                "00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000002");
+        helper.assertTrue(
+                HordeSpawner.spawnHordeMember(helper.getLevel(), helper.absolutePos(new BlockPos(2, 2, 2)), group),
+                "horde member should spawn");
+        Zombie zombie = helper.getEntities(EntityType.ZOMBIE).getFirst();
+
+        helper.assertTrue(group.equals(HordeIdentity.group(zombie)), "horde member should keep its player group");
+        helper.assertTrue(HordeIdentity.hasPersistentGroup(zombie, group), "player group should persist in NBT");
+        helper.succeed();
+    }
+
     public static void hordeMemberDeathDropsNothing(GameTestHelper helper) {
         Zombie zombie = spawnHordeMember(helper, new BlockPos(2, 2, 2));
         zombie.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.DIAMOND));
