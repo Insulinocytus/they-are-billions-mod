@@ -1,34 +1,25 @@
 package com.insulinocytus.theyarebillions.mixin;
 
 import com.insulinocytus.theyarebillions.client.HordeClientRendering;
-import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.level.Level;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Redirect;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(LivingEntity.class)
 public abstract class LivingEntityEffectMixin {
-    @Redirect(
+    @Inject(
             method = "tickEffects",
             at = @At(
                     value = "INVOKE",
                     target = "Lnet/minecraft/world/level/Level;addParticle(Lnet/minecraft/core/particles/ParticleOptions;DDDDDD)V"
-            )
+            ),
+            cancellable = true
     )
-    private void theyarebillions$skipFarHordeEffectParticles(
-            Level level,
-            ParticleOptions particle,
-            double x,
-            double y,
-            double z,
-            double xSpeed,
-            double ySpeed,
-            double zSpeed
-    ) {
-        if (HordeClientRendering.renderNonessentialEffects((LivingEntity) (Object) this)) {
-            level.addParticle(particle, x, y, z, xSpeed, ySpeed, zSpeed);
+    private void theyarebillions$skipFarHordeEffectParticles(CallbackInfo ci) {
+        if (!HordeClientRendering.renderNonessentialEffects((LivingEntity) (Object) this)) {
+            ci.cancel();
         }
     }
 }
