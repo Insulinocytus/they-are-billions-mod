@@ -22,7 +22,7 @@ public final class HordeClientRendering {
         int interval = HordeClientRenderPolicy.animationSampleIntervalTicks(
                 true,
                 distanceToPlayerSqr(entity),
-                ANIMATION_INTERVALS.getOrDefault(entity, 0));
+                ANIMATION_INTERVALS.getOrDefault(entity, -1));
         ANIMATION_INTERVALS.put(entity, interval);
         return interval;
     }

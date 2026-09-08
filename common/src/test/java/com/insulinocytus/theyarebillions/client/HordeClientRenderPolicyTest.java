@@ -53,10 +53,12 @@ class HordeClientRenderPolicyTest {
 
     @Test
     void animationDistanceTiersHaveHysteresis() {
-        assertEquals(1, HordeClientRenderPolicy.animationSampleIntervalTicks(true, 63.0 * 63.0, 1));
-        assertEquals(0, HordeClientRenderPolicy.animationSampleIntervalTicks(true, 60.0 * 60.0, 1));
-        assertEquals(2, HordeClientRenderPolicy.animationSampleIntervalTicks(true, 95.0 * 95.0, 2));
-        assertEquals(1, HordeClientRenderPolicy.animationSampleIntervalTicks(true, 92.0 * 92.0, 2));
+        assertEquals(0, HordeClientRenderPolicy.animationSampleIntervalTicks(true, 63.0 * 63.0, 1));
+        assertEquals(0, HordeClientRenderPolicy.animationSampleIntervalTicks(true, 67.0 * 67.0, 0));
+        assertEquals(1, HordeClientRenderPolicy.animationSampleIntervalTicks(true, 67.0 * 67.0, 1));
+        assertEquals(1, HordeClientRenderPolicy.animationSampleIntervalTicks(true, 95.0 * 95.0, 2));
+        assertEquals(1, HordeClientRenderPolicy.animationSampleIntervalTicks(true, 99.0 * 99.0, 1));
+        assertEquals(2, HordeClientRenderPolicy.animationSampleIntervalTicks(true, 99.0 * 99.0, 2));
     }
 
     @Test

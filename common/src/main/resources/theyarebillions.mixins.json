@@ -9,6 +9,7 @@
     "GameRulesIntegerValueAccessor",
     "LivingEntityMixin",
     "MobMixin",
+    "ServerEntityMixin",
     "SpawnPlacementsMixin",
     "ZombieMixin"
   ],

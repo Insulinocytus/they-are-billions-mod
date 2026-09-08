@@ -30,7 +30,7 @@ public final class HordeGameTests {
         helper.assertTrue(zombie instanceof HordeMemberState, "zombie should expose synchronized horde state");
         helper.assertTrue(
                 ((HordeMemberState) zombie).theyarebillions$isSyncedHordeMember(),
-                "horde state should be available to clients through vanilla entity data");
+                "horde state should be available to clients through the mod payload");
         helper.assertTrue(!zombie.isPersistenceRequired(), "horde tag must not force persistence");
         helper.assertTrue(!zombie.isBaby(), "horde members are adults");
         helper.assertTrue(!zombie.canPickUpLoot(), "horde members cannot pick up items");
@@ -54,10 +54,15 @@ public final class HordeGameTests {
     public static void removingHordeTagRestoresServerBehavior(GameTestHelper helper) {
         Zombie zombie = spawnHordeMember(helper, new BlockPos(2, 2, 2));
         zombie.removeTag(HordeIdentity.HORDE_TAG);
+        helper.assertFalse(
+                ((HordeMemberState) zombie).theyarebillions$isSyncedHordeMember(),
+                "external tag removal must update the client identity mirror");
+        helper.assertFalse(HordeIdentity.isHordeMember(zombie), "server identity must use only the horde tag");
+        zombie.addTag(HordeIdentity.HORDE_TAG);
         helper.assertTrue(
                 ((HordeMemberState) zombie).theyarebillions$isSyncedHordeMember(),
-                "test requires a stale client-only horde state");
-        helper.assertFalse(HordeIdentity.isHordeMember(zombie), "server identity must use only the horde tag");
+                "external tag addition must update the client identity mirror");
+        zombie.removeTag(HordeIdentity.HORDE_TAG);
         zombie.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.DIAMOND));
         helper.assertTrue(
                 !zombie.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty(),

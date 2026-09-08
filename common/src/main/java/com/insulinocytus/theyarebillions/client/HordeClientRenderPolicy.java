@@ -18,7 +18,7 @@ public final class HordeClientRenderPolicy {
     }
 
     static int animationSampleIntervalTicks(boolean hordeMember, double distanceToPlayerSqr) {
-        return animationSampleIntervalTicks(ENABLED, hordeMember, distanceToPlayerSqr, 0);
+        return animationSampleIntervalTicks(ENABLED, hordeMember, distanceToPlayerSqr, -1);
     }
 
     static int animationSampleIntervalTicks(boolean hordeMember, double distanceToPlayerSqr, int previousInterval) {
@@ -26,7 +26,7 @@ public final class HordeClientRenderPolicy {
     }
 
     static int animationSampleIntervalTicks(boolean enabled, boolean hordeMember, double distanceToPlayerSqr) {
-        return animationSampleIntervalTicks(enabled, hordeMember, distanceToPlayerSqr, 0);
+        return animationSampleIntervalTicks(enabled, hordeMember, distanceToPlayerSqr, -1);
     }
 
     static int animationSampleIntervalTicks(
@@ -39,20 +39,20 @@ public final class HordeClientRenderPolicy {
             return 0;
         }
         if (distanceToPlayerSqr <= REDUCED_ANIMATION_DISTANCE * REDUCED_ANIMATION_DISTANCE) {
-            return previousInterval != 0
-                    && distanceToPlayerSqr
-                    > (REDUCED_ANIMATION_DISTANCE - ANIMATION_DISTANCE_HYSTERESIS)
-                    * (REDUCED_ANIMATION_DISTANCE - ANIMATION_DISTANCE_HYSTERESIS)
-                    ? previousInterval
-                    : 0;
+            return 0;
+        }
+        if (previousInterval == 0
+                && distanceToPlayerSqr <= (REDUCED_ANIMATION_DISTANCE + ANIMATION_DISTANCE_HYSTERESIS)
+                * (REDUCED_ANIMATION_DISTANCE + ANIMATION_DISTANCE_HYSTERESIS)) {
+            return 0;
         }
         if (distanceToPlayerSqr <= FAR_ANIMATION_DISTANCE * FAR_ANIMATION_DISTANCE) {
-            return previousInterval == 2
-                    && distanceToPlayerSqr
-                    > (FAR_ANIMATION_DISTANCE - ANIMATION_DISTANCE_HYSTERESIS)
-                    * (FAR_ANIMATION_DISTANCE - ANIMATION_DISTANCE_HYSTERESIS)
-                    ? 2
-                    : 1;
+            return 1;
+        }
+        if (previousInterval == 1
+                && distanceToPlayerSqr <= (FAR_ANIMATION_DISTANCE + ANIMATION_DISTANCE_HYSTERESIS)
+                * (FAR_ANIMATION_DISTANCE + ANIMATION_DISTANCE_HYSTERESIS)) {
+            return 1;
         }
         return 2;
     }
