@@ -1,4 +1,4 @@
-package com.insulinocytus.theyarebillions.fabric;
+package com.insulinocytus.theyarebillions.horde.fabric;
 
 import com.insulinocytus.theyarebillions.horde.HordeIdentityPayload;
 import net.fabricmc.fabric.api.networking.v1.PlayerLookup;

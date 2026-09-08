@@ -1,4 +1,4 @@
-package com.insulinocytus.theyarebillions.neoforge;
+package com.insulinocytus.theyarebillions.horde.neoforge;
 
 import com.insulinocytus.theyarebillions.horde.HordeIdentityPayload;
 import net.minecraft.server.level.ServerPlayer;
