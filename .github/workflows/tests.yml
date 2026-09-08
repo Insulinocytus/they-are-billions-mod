@@ -30,6 +30,7 @@ jobs:
               - 'common/**'
               - 'fabric/**'
               - 'neoforge/**'
+              - 'perf/scenarios/**'
               - 'build.gradle'
               - 'settings.gradle'
               - 'gradle.properties'
