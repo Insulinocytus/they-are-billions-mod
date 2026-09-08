@@ -33,6 +33,12 @@ public final class HordeClientRendering {
                 distanceToPlayerSqr(entity));
     }
 
+    public static boolean renderNonessentialEffects(Entity entity) {
+        return HordeClientRenderPolicy.renderNonessentialEffects(
+                HordeIdentity.isClientHordeMember(entity),
+                distanceToPlayerSqr(entity));
+    }
+
     private static double distanceToPlayerSqr(Entity entity) {
         LocalPlayer player = Minecraft.getInstance().player;
         return player == null ? 0.0 : player.distanceToSqr(entity);

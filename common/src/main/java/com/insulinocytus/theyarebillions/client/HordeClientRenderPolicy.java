@@ -8,6 +8,7 @@ public final class HordeClientRenderPolicy {
     static final double FAR_ANIMATION_DISTANCE = 96.0;
     private static final double ANIMATION_DISTANCE_HYSTERESIS = 4.0;
     static final double SHADOW_DISTANCE = 12.0;
+    static final double NONESSENTIAL_EFFECT_DISTANCE = 48.0;
 
     private HordeClientRenderPolicy() {
     }
@@ -64,5 +65,15 @@ public final class HordeClientRenderPolicy {
         return !enabled
                 || !hordeMember
                 || distanceToPlayerSqr <= SHADOW_DISTANCE * SHADOW_DISTANCE;
+    }
+
+    static boolean renderNonessentialEffects(boolean hordeMember, double distanceToPlayerSqr) {
+        return renderNonessentialEffects(ENABLED, hordeMember, distanceToPlayerSqr);
+    }
+
+    static boolean renderNonessentialEffects(boolean enabled, boolean hordeMember, double distanceToPlayerSqr) {
+        return !enabled
+                || !hordeMember
+                || distanceToPlayerSqr <= NONESSENTIAL_EFFECT_DISTANCE * NONESSENTIAL_EFFECT_DISTANCE;
     }
 }

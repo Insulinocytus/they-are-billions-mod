@@ -15,6 +15,7 @@
   "client": [
     "AbstractZombieModelMixin",
     "EntityRenderDispatcherMixin",
+    "LivingEntityEffectMixin",
     "MinecraftFrameSamplerMixin"
   ],
   "injectors": {

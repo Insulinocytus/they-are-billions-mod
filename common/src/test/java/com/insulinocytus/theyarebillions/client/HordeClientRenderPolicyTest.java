@@ -18,6 +18,7 @@ class HordeClientRenderPolicyTest {
         double nearby = 8.0 * 8.0;
         assertEquals(0, HordeClientRenderPolicy.animationSampleIntervalTicks(true, nearby));
         assertTrue(HordeClientRenderPolicy.renderShadow(true, nearby));
+        assertTrue(HordeClientRenderPolicy.renderNonessentialEffects(true, nearby));
     }
 
     @Test
@@ -25,6 +26,7 @@ class HordeClientRenderPolicyTest {
         double distant = 80.0 * 80.0;
         assertEquals(1, HordeClientRenderPolicy.animationSampleIntervalTicks(true, distant));
         assertFalse(HordeClientRenderPolicy.renderShadow(true, distant));
+        assertFalse(HordeClientRenderPolicy.renderNonessentialEffects(true, distant));
     }
 
     @Test
@@ -38,6 +40,7 @@ class HordeClientRenderPolicyTest {
         double distant = 256.0 * 256.0;
         assertEquals(0, HordeClientRenderPolicy.animationSampleIntervalTicks(false, distant));
         assertTrue(HordeClientRenderPolicy.renderShadow(false, distant));
+        assertTrue(HordeClientRenderPolicy.renderNonessentialEffects(false, distant));
     }
 
     @Test
@@ -45,6 +48,7 @@ class HordeClientRenderPolicyTest {
         double distant = 256.0 * 256.0;
         assertEquals(0, HordeClientRenderPolicy.animationSampleIntervalTicks(false, true, distant));
         assertTrue(HordeClientRenderPolicy.renderShadow(false, true, distant));
+        assertTrue(HordeClientRenderPolicy.renderNonessentialEffects(false, true, distant));
     }
 
     @Test
