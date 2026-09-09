@@ -59,11 +59,11 @@ public final class HordeNavigation {
                     level.players(),
                     zombie.position(),
                     player -> HordeSpawner.isValidPlayer(player) && conditions.test(zombie, player));
-            follower.useVanilla(zombie);
             if (attackTarget != null) {
+                follower.useVanilla(zombie);
                 zombie.setTarget(attackTarget);
+                return;
             }
-            return;
         }
         if (zombie.getTarget() != null) {
             follower.useVanilla(zombie);
@@ -145,7 +145,7 @@ public final class HordeNavigation {
                 return;
             }
             follower.cursor = connection;
-            connect(level, zombie, follower, route, tick);
+            connect(level, zombie, follower, route, tick, false);
         }
 
         double distanceToWaypoint = Math.sqrt(distanceSquared(zombie, route.template.waypoints().get(follower.cursor)));
@@ -157,14 +157,19 @@ public final class HordeNavigation {
                 route.succeeded(follower.cursor);
                 follower.clearFailure();
             } else {
-                connect(level, zombie, follower, route, tick);
+                connect(level, zombie, follower, route, tick, true);
             }
             follower.sample(route, follower.cursor, distanceToWaypoint, tick);
         }
     }
 
     private static void connect(
-            ServerLevel level, Zombie zombie, Follower follower, RouteEntry route, long tick) {
+            ServerLevel level,
+            Zombie zombie,
+            Follower follower,
+            RouteEntry route,
+            long tick,
+            boolean reportRouteFailure) {
         if (zombie.tickCount < follower.nextPathTick || !ROUTES.get(level).acquire(tick)) {
             return;
         }
@@ -172,7 +177,7 @@ public final class HordeNavigation {
         Waypoint waypoint = route.template.waypoints().get(follower.cursor);
         Path path = zombie.getNavigation().createPath(new BlockPos(waypoint.x(), waypoint.y(), waypoint.z()), 0);
         if (afterIndependentRetry(path != null && path.canReach()) == Recovery.BLOCKED) {
-            if (follower.reportFailure(route, follower.cursor)) {
+            if (reportRouteFailure && follower.reportFailure(route, follower.cursor)) {
                 route.failed(follower.cursor);
             }
         } else {
