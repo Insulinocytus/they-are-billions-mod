@@ -85,6 +85,18 @@ class HordeNavigationTest {
         first.clearFailure();
         assertEquals(true, first.reportFailure(route, 0));
     }
+    @Test
+    void acceptsPartialPathsOnlyWhenTheyMoveTowardTheTarget() {
+        HordeNavigation.Waypoint start = new HordeNavigation.Waypoint(0, 64, 0);
+        HordeNavigation.Waypoint target = new HordeNavigation.Waypoint(100, 64, 0);
+
+        assertEquals(true, HordeNavigation.makesForwardProgress(
+                start, target, new HordeNavigation.Waypoint(16, 64, 0)));
+        assertEquals(false, HordeNavigation.makesForwardProgress(start, target, start));
+        assertEquals(false, HordeNavigation.makesForwardProgress(
+                start, target, new HordeNavigation.Waypoint(-1, 64, 0)));
+    }
+
 
     @Test
     void choosesTheNearestValidPlayerFromTheSavedGroup() {

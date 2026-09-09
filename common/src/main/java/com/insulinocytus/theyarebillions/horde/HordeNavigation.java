@@ -298,6 +298,10 @@ public final class HordeNavigation {
         long dz = first.z() - second.z();
         return dx * dx + dy * dy + dz * dz;
     }
+    static boolean makesForwardProgress(Waypoint start, Waypoint target, Waypoint end) {
+        return distanceSquared(end, target) < distanceSquared(start, target);
+    }
+
 
     private static long terrainFingerprint(ServerLevel level, List<Waypoint> waypoints) {
         long fingerprint = 1;
@@ -467,13 +471,17 @@ public final class HordeNavigation {
                 return null;
             }
             Path path = zombie.getNavigation().createPath(target, 0);
-            if (path == null || !path.canReach() || path.getNodeCount() == 0) {
+            if (path == null || path.getNodeCount() == 0) {
                 return null;
             }
             List<Waypoint> waypoints = java.util.stream.IntStream.range(0, path.getNodeCount())
                     .mapToObj(path::getNodePos)
                     .map(Waypoint::of)
                     .toList();
+            if (!makesForwardProgress(
+                    Waypoint.of(zombie.blockPosition()), Waypoint.of(target), waypoints.getLast())) {
+                return null;
+            }
             RouteTemplate template = new RouteTemplate(
                     waypoints, Waypoint.of(target), tick, terrainFingerprint(level, waypoints));
             RouteEntry created = new RouteEntry(template);
