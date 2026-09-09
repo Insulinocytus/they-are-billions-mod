@@ -9,10 +9,14 @@
     "GameRulesIntegerValueAccessor",
     "LivingEntityMixin",
     "MobMixin",
+    "ServerEntityMixin",
     "SpawnPlacementsMixin",
     "ZombieMixin"
   ],
   "client": [
+    "AbstractZombieModelMixin",
+    "EntityRenderDispatcherMixin",
+    "LivingEntityEffectMixin",
     "MinecraftFrameSamplerMixin"
   ],
   "injectors": {

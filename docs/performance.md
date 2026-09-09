@@ -53,6 +53,15 @@ Fabric 与 NeoForge 的两个场景都必须达到目标才发布 `0.1.0`。任�
 ./gradlew runIdleClientBaseline -Pperf.platform=fabric -Pperf.scenario=open-field
 ```
 
+客户端尸潮渲染优化可用 `-Pperf.clientRenderOptimization=true|false` 单独开关，便于在同一场景、同一硬件上做 A/B 帧时间对照。例如：
+
+```text
+./gradlew runIdleClientBaseline -Pperf.platform=fabric -Pperf.scenario=open-field -Pperf.clientRenderOptimization=false
+./gradlew runIdleClientBaseline -Pperf.platform=fabric -Pperf.scenario=open-field -Pperf.clientRenderOptimization=true
+```
+
+`metrics.json` 会写入 `clientRenderOptimizationEnabled`，同时记录客户端平均 FPS 与 P95 帧时间，因此无需安装额外性能分析 Mod 即可比较该优化的影响。
+
 缩短本地冒烟（PowerShell 给带点号的 `-P` 参数加引号）：
 
 ```text

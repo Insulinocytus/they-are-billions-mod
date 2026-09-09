@@ -30,6 +30,12 @@ public final class HordeIdentity {
         return isOrdinaryZombie(entity) && entity.getTags().contains(HORDE_TAG);
     }
 
+    public static boolean isClientHordeMember(Entity entity) {
+        return isOrdinaryZombie(entity)
+                && entity instanceof HordeMemberState state
+                && state.theyarebillions$isSyncedHordeMember();
+    }
+
     public static boolean hasPersistentHordeTag(Entity entity) {
         CompoundTag nbt = new CompoundTag();
         entity.saveWithoutId(nbt);
@@ -61,6 +67,13 @@ public final class HordeIdentity {
     public static void detachIfNamed(Entity entity) {
         if (isHordeMember(entity) && entity.hasCustomName()) {
             entity.removeTag(HORDE_TAG);
+        }
+    }
+
+    public static void syncClientState(Entity entity) {
+        if (!entity.level().isClientSide() && isOrdinaryZombie(entity) && entity instanceof HordeMemberState state) {
+            state.theyarebillions$setSyncedHordeMember(entity.getTags().contains(HORDE_TAG));
+            HordeIdentityNetworking.sendToTracking(entity);
         }
     }
 }

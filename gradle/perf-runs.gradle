@@ -4,6 +4,7 @@ def warmup = (findProperty("perf.warmupTicks") ?: "400").toString()
 def duration = (findProperty("perf.durationTicks") ?: "12000").toString()
 def generateTicks = (findProperty("perf.generateTicks") ?: "200").toString()
 def xmx = (findProperty("perf.xmx") ?: "8G").toString()
+def clientRenderOptimization = (findProperty("perf.clientRenderOptimization") ?: "true").toString()
 def platform = project.name
 
 def perfVmArgs = { String scenario, String mode, String side ->
@@ -17,7 +18,8 @@ def perfVmArgs = { String scenario, String mode, String side ->
             "-Dtheyarebillions.perf.output=${perfOutput}",
             "-Dtheyarebillions.perf.warmupTicks=${warmup}",
             "-Dtheyarebillions.perf.durationTicks=${duration}",
-            "-Dtheyarebillions.perf.generateTicks=${generateTicks}"
+            "-Dtheyarebillions.perf.generateTicks=${generateTicks}",
+            "-Dtheyarebillions.clientRenderOptimization.enabled=${clientRenderOptimization}"
     ]
 }
 

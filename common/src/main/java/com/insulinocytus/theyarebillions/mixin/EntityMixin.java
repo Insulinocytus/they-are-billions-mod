@@ -8,9 +8,24 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(Entity.class)
 public abstract class EntityMixin {
+    @Inject(method = "addTag", at = @At("RETURN"))
+    private void theyarebillions$syncAddedHordeTag(String tag, CallbackInfoReturnable<Boolean> cir) {
+        if (cir.getReturnValue() && HordeIdentity.HORDE_TAG.equals(tag)) {
+            HordeIdentity.syncClientState((Entity) (Object) this);
+        }
+    }
+
+    @Inject(method = "removeTag", at = @At("RETURN"))
+    private void theyarebillions$syncRemovedHordeTag(String tag, CallbackInfoReturnable<Boolean> cir) {
+        if (cir.getReturnValue() && HordeIdentity.HORDE_TAG.equals(tag)) {
+            HordeIdentity.syncClientState((Entity) (Object) this);
+        }
+    }
+
     @Inject(method = "setCustomName", at = @At("TAIL"))
     private void theyarebillions$detachNamedHorde(Component name, CallbackInfo ci) {
         HordeIdentity.detachIfNamed((Entity) (Object) this);
@@ -18,6 +33,8 @@ public abstract class EntityMixin {
 
     @Inject(method = "load", at = @At("RETURN"))
     private void theyarebillions$detachLoadedNamedHorde(CompoundTag nbt, CallbackInfo ci) {
-        HordeIdentity.detachIfNamed((Entity) (Object) this);
+        Entity entity = (Entity) (Object) this;
+        HordeIdentity.detachIfNamed(entity);
+        HordeIdentity.syncClientState(entity);
     }
 }
