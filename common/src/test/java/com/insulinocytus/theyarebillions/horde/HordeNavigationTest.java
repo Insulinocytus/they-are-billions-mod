@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.util.ArrayList;
 import java.util.List;
-import net.minecraft.world.phys.Vec3;
 import org.junit.jupiter.api.Test;
 
 class HordeNavigationTest {
@@ -74,8 +73,8 @@ class HordeNavigationTest {
     void eachFollowerReportsOnlyItsFirstFailureForARouteSegment() {
         HordeNavigation.RouteEntry route = new HordeNavigation.RouteEntry(new HordeNavigation.RouteTemplate(List.of(
                 new HordeNavigation.Waypoint(4, 64, 0), new HordeNavigation.Waypoint(8, 64, 0))));
-        HordeNavigation.Follower first = new HordeNavigation.Follower(0);
-        HordeNavigation.Follower second = new HordeNavigation.Follower(0);
+        HordeNavigation.Follower first = new HordeNavigation.Follower(0, 0);
+        HordeNavigation.Follower second = new HordeNavigation.Follower(0, 0);
 
         assertEquals(true, first.reportFailure(route, 0));
         assertEquals(false, first.reportFailure(route, 0));
@@ -84,6 +83,14 @@ class HordeNavigationTest {
 
         first.clearFailure();
         assertEquals(true, first.reportFailure(route, 0));
+    }
+
+    @Test
+    void staggersInitialPathfindingByEntityId() {
+        assertEquals(101, HordeNavigation.staggeredPathTick(100, 1));
+        assertEquals(102, HordeNavigation.staggeredPathTick(100, 2));
+        assertEquals(101, HordeNavigation.staggeredPathTick(100, 21));
+        assertEquals(119, HordeNavigation.staggeredPathTick(100, -1));
     }
     @Test
     void acceptsPartialPathsOnlyWhenTheyMoveTowardTheTarget() {
@@ -97,16 +104,4 @@ class HordeNavigationTest {
                 start, target, new HordeNavigation.Waypoint(-1, 64, 0)));
     }
 
-
-    @Test
-    void choosesTheNearestValidPlayerFromTheSavedGroup() {
-        HordePlanner.GroupIdentity group = HordePlanner.GroupIdentity.of("a", "b");
-        List<HordePlanner.PlayerRef> players = List.of(
-                new HordePlanner.PlayerRef("outside", 1, 64, 0),
-                new HordePlanner.PlayerRef("a", 5, 64, 0),
-                new HordePlanner.PlayerRef("b", 10, 64, 0));
-
-        assertEquals(players.get(1), HordeNavigation.nearestOwnedPlayer(group, players, new Vec3(0, 64, 0)));
-        assertEquals(null, HordeNavigation.nearestOwnedPlayer(group, List.of(players.getFirst()), Vec3.ZERO));
-    }
 }

@@ -41,8 +41,8 @@ public final class HordeNavigation {
             }
             return;
         }
-        Follower follower = FOLLOWERS.computeIfAbsent(
-                zombie, ignored -> new Follower(level.getGameTime()));
+        Follower follower = FOLLOWERS.computeIfAbsent(zombie, ignored -> new Follower(
+                level.getGameTime(), staggeredPathTick(zombie.tickCount, zombie.getId())));
         ServerPlayer target = nearestOwnedServerPlayer(
                 group, level.players(), zombie.position(), HordeSpawner::isValidPlayer);
         if (target == null) {
@@ -69,11 +69,10 @@ public final class HordeNavigation {
             follower.useVanilla(zombie);
             return;
         }
-        if (follower.vanillaFallback) {
-            if (!zombie.getNavigation().isDone()) {
-                return;
-            }
-            follower.vanillaFallback = false;
+        long tick = level.getGameTime();
+        RouteCache cache = ROUTES.computeIfAbsent(level, ignored -> new RouteCache());
+        if (follower.vanillaFallback && followVanillaFallback(cache, zombie, target, follower, tick)) {
+            return;
         }
         double lodDistance = Double.MAX_VALUE;
         for (ServerPlayer player : level.players()) {
@@ -85,9 +84,8 @@ public final class HordeNavigation {
         Mode nextMode = mode(follower.mode, lodDistance);
         if (nextMode == Mode.VANILLA) {
             follower.useVanilla(zombie);
-            if (zombie.tickCount >= follower.nextPathTick) {
+            if (acquirePathfinding(cache, zombie, follower, tick)) {
                 zombie.getNavigation().moveTo(target, SPEED);
-                follower.nextPathTick = zombie.tickCount + PATH_RETRY_TICKS;
             }
             return;
         }
@@ -95,12 +93,16 @@ public final class HordeNavigation {
             zombie.getNavigation().stop();
             follower.mode = Mode.SHARED;
         }
-        followShared(level, zombie, target, follower);
+        followShared(level, zombie, target, follower, cache, tick);
     }
 
-    private static void followShared(ServerLevel level, Zombie zombie, ServerPlayer target, Follower follower) {
-        long tick = level.getGameTime();
-        RouteCache cache = ROUTES.computeIfAbsent(level, ignored -> new RouteCache());
+    private static void followShared(
+            ServerLevel level,
+            Zombie zombie,
+            ServerPlayer target,
+            Follower follower,
+            RouteCache cache,
+            long tick) {
         Waypoint targetPoint = Waypoint.of(target.blockPosition());
         if (follower.route == null
                 || !cache.valid(level, follower.route, targetPoint, tick, follower.cursor)) {
@@ -121,6 +123,7 @@ public final class HordeNavigation {
             follower.cursor = advanceCursor(route.template, follower.cursor);
         }
         if (follower.cursor >= route.template.waypoints().size()) {
+            cache.evict(route);
             follower.clearRoute();
             return;
         }
@@ -140,12 +143,11 @@ public final class HordeNavigation {
             if (connection < 0) {
                 follower.useVanilla(zombie);
                 follower.vanillaFallback = true;
-                zombie.getNavigation().moveTo(target, SPEED);
-                follower.nextPathTick = zombie.tickCount + PATH_RETRY_TICKS;
+                followVanillaFallback(cache, zombie, target, follower, tick);
                 return;
             }
             follower.cursor = connection;
-            connect(level, zombie, follower, route, tick, false);
+            connect(cache, zombie, follower, route, tick, false);
         }
 
         double distanceToWaypoint = Math.sqrt(distanceSquared(zombie, route.template.waypoints().get(follower.cursor)));
@@ -157,23 +159,42 @@ public final class HordeNavigation {
                 route.succeeded(follower.cursor);
                 follower.clearFailure();
             } else {
-                connect(level, zombie, follower, route, tick, true);
+                connect(cache, zombie, follower, route, tick, true);
             }
             follower.sample(route, follower.cursor, distanceToWaypoint, tick);
         }
     }
 
+    private static boolean followVanillaFallback(
+            RouteCache cache, Zombie zombie, ServerPlayer target, Follower follower, long tick) {
+        if (!follower.fallbackPathStarted) {
+            if (!acquirePathfinding(cache, zombie, follower, tick)) {
+                return true;
+            }
+            if (!zombie.getNavigation().moveTo(target, SPEED)) {
+                follower.vanillaFallback = false;
+                return false;
+            }
+            follower.fallbackPathStarted = true;
+        }
+        if (!zombie.getNavigation().isDone()) {
+            return true;
+        }
+        follower.vanillaFallback = false;
+        follower.fallbackPathStarted = false;
+        return false;
+    }
+
     private static void connect(
-            ServerLevel level,
+            RouteCache cache,
             Zombie zombie,
             Follower follower,
             RouteEntry route,
             long tick,
             boolean reportRouteFailure) {
-        if (zombie.tickCount < follower.nextPathTick || !ROUTES.get(level).acquire(tick)) {
+        if (!acquirePathfinding(cache, zombie, follower, tick)) {
             return;
         }
-        follower.nextPathTick = zombie.tickCount + PATH_RETRY_TICKS;
         Waypoint waypoint = route.template.waypoints().get(follower.cursor);
         Path path = zombie.getNavigation().createPath(new BlockPos(waypoint.x(), waypoint.y(), waypoint.z()), 0);
         if (afterIndependentRetry(path != null && path.canReach()) == Recovery.BLOCKED) {
@@ -185,6 +206,14 @@ public final class HordeNavigation {
             follower.clearFailure();
             zombie.getNavigation().moveTo(path, SPEED);
         }
+    }
+
+    private static boolean acquirePathfinding(RouteCache cache, Zombie zombie, Follower follower, long tick) {
+        if (zombie.tickCount < follower.nextPathTick || !cache.acquire(tick)) {
+            return false;
+        }
+        follower.nextPathTick = zombie.tickCount + PATH_RETRY_TICKS;
+        return true;
     }
 
     private static boolean directlyReachable(Zombie zombie, Waypoint waypoint) {
@@ -263,6 +292,10 @@ public final class HordeNavigation {
                 && failures < 3;
     }
 
+    static int staggeredPathTick(int tickCount, int entityId) {
+        return tickCount + (int) Math.floorMod((long) entityId - tickCount, PATH_RETRY_TICKS);
+    }
+
     static Recovery sampleProgress(double distanceImprovement) {
         return distanceImprovement >= 0.25 ? Recovery.MOVING : Recovery.RETRY_INDEPENDENT;
     }
@@ -271,27 +304,6 @@ public final class HordeNavigation {
         return pathFound ? Recovery.CONNECTING : Recovery.BLOCKED;
     }
 
-    static HordePlanner.PlayerRef nearestOwnedPlayer(
-            HordePlanner.GroupIdentity group,
-            List<HordePlanner.PlayerRef> players,
-            Vec3 position) {
-        HordePlanner.PlayerRef nearest = null;
-        double nearestDistance = Double.MAX_VALUE;
-        for (HordePlanner.PlayerRef player : players) {
-            if (!group.memberIds().contains(player.id())) {
-                continue;
-            }
-            double dx = player.x() - position.x;
-            double dy = player.y() - position.y;
-            double dz = player.z() - position.z;
-            double distance = dx * dx + dy * dy + dz * dz;
-            if (distance < nearestDistance) {
-                nearest = player;
-                nearestDistance = distance;
-            }
-        }
-        return nearest;
-    }
 
     private static double distanceSquared(Zombie zombie, Waypoint waypoint) {
         return zombie.distanceToSqr(waypoint.x() + 0.5, waypoint.y(), waypoint.z() + 0.5);
@@ -384,9 +396,11 @@ public final class HordeNavigation {
         private RouteEntry failedRoute;
         private int failedCursor = -1;
         private boolean vanillaFallback;
+        private boolean fallbackPathStarted;
 
-        Follower(long tick) {
+        Follower(long tick, int nextPathTick) {
             lastSampleTick = tick;
+            this.nextPathTick = nextPathTick;
         }
 
         private void useVanilla(Zombie zombie) {
@@ -395,6 +409,7 @@ public final class HordeNavigation {
             }
             mode = Mode.VANILLA;
             vanillaFallback = false;
+            fallbackPathStarted = false;
             clearRoute();
         }
 
@@ -492,6 +507,10 @@ public final class HordeNavigation {
             RouteEntry created = new RouteEntry(template);
             entries.put(key, created);
             return created;
+        }
+
+        private void evict(RouteEntry route) {
+            entries.values().removeIf(entry -> entry == route);
         }
 
         private boolean valid(ServerLevel level, RouteEntry route, Waypoint target, long tick, int cursor) {
