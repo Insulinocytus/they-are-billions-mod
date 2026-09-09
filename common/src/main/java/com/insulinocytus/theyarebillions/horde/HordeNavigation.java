@@ -50,9 +50,9 @@ public final class HordeNavigation {
             return;
         }
 
-        double distance = zombie.distanceTo(target);
+        double targetDistance = zombie.distanceTo(target);
         double followRange = zombie.getAttributeValue(Attributes.FOLLOW_RANGE);
-        if (distance <= followRange) {
+        if (targetDistance <= followRange) {
             TargetingConditions conditions = TargetingConditions.forCombat().range(followRange);
             ServerPlayer attackTarget = nearestOwnedServerPlayer(
                     group,
@@ -69,8 +69,20 @@ public final class HordeNavigation {
             follower.useVanilla(zombie);
             return;
         }
+        if (follower.vanillaFallback) {
+            if (!zombie.getNavigation().isDone()) {
+                return;
+            }
+            follower.vanillaFallback = false;
+        }
+        double lodDistance = Double.MAX_VALUE;
+        for (ServerPlayer player : level.players()) {
+            if (HordeSpawner.isValidPlayer(player)) {
+                lodDistance = Math.min(lodDistance, zombie.distanceTo(player));
+            }
+        }
 
-        Mode nextMode = mode(follower.mode, distance);
+        Mode nextMode = mode(follower.mode, lodDistance);
         if (nextMode == Mode.VANILLA) {
             follower.useVanilla(zombie);
             if (zombie.tickCount >= follower.nextPathTick) {
@@ -127,6 +139,7 @@ public final class HordeNavigation {
             int connection = connectionWaypoint(route.template, follower.cursor, position);
             if (connection < 0) {
                 follower.useVanilla(zombie);
+                follower.vanillaFallback = true;
                 zombie.getNavigation().moveTo(target, SPEED);
                 follower.nextPathTick = zombie.tickCount + PATH_RETRY_TICKS;
                 return;
@@ -361,6 +374,7 @@ public final class HordeNavigation {
         private double sampleDistance;
         private RouteEntry failedRoute;
         private int failedCursor = -1;
+        private boolean vanillaFallback;
 
         Follower(long tick) {
             lastSampleTick = tick;
@@ -371,6 +385,7 @@ public final class HordeNavigation {
                 zombie.getNavigation().stop();
             }
             mode = Mode.VANILLA;
+            vanillaFallback = false;
             clearRoute();
         }
 
@@ -452,7 +467,7 @@ public final class HordeNavigation {
                 return null;
             }
             Path path = zombie.getNavigation().createPath(target, 0);
-            if (path == null || path.getNodeCount() == 0) {
+            if (path == null || !path.canReach() || path.getNodeCount() == 0) {
                 return null;
             }
             List<Waypoint> waypoints = java.util.stream.IntStream.range(0, path.getNodeCount())
