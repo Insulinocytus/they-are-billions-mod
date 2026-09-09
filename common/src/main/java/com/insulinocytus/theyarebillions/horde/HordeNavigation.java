@@ -78,13 +78,11 @@ public final class HordeNavigation {
     private static void followShared(ServerLevel level, Zombie zombie, ServerPlayer target, Follower follower) {
         long tick = level.getGameTime();
         RouteCache cache = ROUTES.computeIfAbsent(level, ignored -> new RouteCache());
-        RouteKey key = RouteKey.of(zombie, target.blockPosition());
         Waypoint targetPoint = Waypoint.of(target.blockPosition());
         if (follower.route == null
-                || !key.equals(follower.key)
                 || !cache.valid(level, follower.route, targetPoint, tick, follower.cursor)) {
+            RouteKey key = RouteKey.of(zombie, target.blockPosition());
             follower.route = cache.route(level, zombie, target.blockPosition(), key, tick);
-            follower.key = key;
             follower.cursor = 0;
         }
         RouteEntry route = follower.route;
@@ -98,8 +96,7 @@ public final class HordeNavigation {
             follower.cursor = advanceCursor(route.template, follower.cursor);
         }
         if (follower.cursor >= route.template.waypoints().size()) {
-            route.invalid = true;
-            follower.route = null;
+            follower.clearRoute();
             return;
         }
 
@@ -116,8 +113,9 @@ public final class HordeNavigation {
         } else {
             int connection = connectionWaypoint(route.template, follower.cursor, position);
             if (connection < 0) {
-                follower.route = null;
-                follower.key = null;
+                follower.useVanilla(zombie);
+                zombie.getNavigation().moveTo(target, SPEED);
+                follower.nextPathTick = zombie.tickCount + PATH_RETRY_TICKS;
                 return;
             }
             follower.cursor = connection;
@@ -212,7 +210,7 @@ public final class HordeNavigation {
 
     static boolean isRouteValid(
             RouteTemplate route, Waypoint target, long tick, long terrainFingerprint, int cursor, int failures) {
-        return route.target().equals(target)
+        return distanceSquared(route.target(), target) <= 16L * 16L
                 && tick - route.createdTick() < ROUTE_TTL_TICKS
                 && route.terrainFingerprint() == terrainFingerprint
                 && cursor < route.waypoints().size()
@@ -251,6 +249,13 @@ public final class HordeNavigation {
 
     private static double distanceSquared(Zombie zombie, Waypoint waypoint) {
         return zombie.distanceToSqr(waypoint.x() + 0.5, waypoint.y(), waypoint.z() + 0.5);
+    }
+
+    private static long distanceSquared(Waypoint first, Waypoint second) {
+        long dx = first.x() - second.x();
+        long dy = first.y() - second.y();
+        long dz = first.z() - second.z();
+        return dx * dx + dy * dy + dz * dz;
     }
 
     private static long terrainFingerprint(ServerLevel level, List<Waypoint> waypoints) {
@@ -319,7 +324,6 @@ public final class HordeNavigation {
 
     private static final class Follower {
         private Mode mode = Mode.VANILLA;
-        private RouteKey key;
         private RouteEntry route;
         private int cursor;
         private int nextPathTick;
@@ -337,8 +341,11 @@ public final class HordeNavigation {
                 zombie.getNavigation().stop();
             }
             mode = Mode.VANILLA;
+            clearRoute();
+        }
+
+        private void clearRoute() {
             route = null;
-            key = null;
             cursor = 0;
             sampleRoute = null;
             sampleCursor = -1;
@@ -386,11 +393,15 @@ public final class HordeNavigation {
         private int permits;
 
         private RouteEntry route(ServerLevel level, Zombie zombie, BlockPos target, RouteKey key, long tick) {
+            entries.values().removeIf(entry -> entry.invalid
+                    || tick - entry.template.createdTick() >= ROUTE_TTL_TICKS);
             RouteEntry existing = entries.get(key);
-            if (existing != null
-                    && valid(level, existing, Waypoint.of(target), tick, 0)
-                    && connectionWaypoint(existing.template, 0, Waypoint.of(zombie.blockPosition())) >= 0) {
-                return existing;
+            if (existing != null) {
+                if (valid(level, existing, Waypoint.of(target), tick, 0)
+                        && connectionWaypoint(existing.template, 0, Waypoint.of(zombie.blockPosition())) >= 0) {
+                    return existing;
+                }
+                entries.remove(key);
             }
             if (!acquire(tick)) {
                 return null;

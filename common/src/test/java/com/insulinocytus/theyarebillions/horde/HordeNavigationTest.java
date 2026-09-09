@@ -52,8 +52,10 @@ class HordeNavigationTest {
 
         assertEquals(true, HordeNavigation.isRouteValid(route, target, 109, 7, 0, 0));
         assertEquals(false, HordeNavigation.isRouteValid(route, target, 110, 7, 0, 0));
+        assertEquals(true, HordeNavigation.isRouteValid(
+                route, new HordeNavigation.Waypoint(116, 64, 0), 20, 7, 0, 0));
         assertEquals(false, HordeNavigation.isRouteValid(
-                route, new HordeNavigation.Waypoint(101, 64, 0), 20, 7, 0, 0));
+                route, new HordeNavigation.Waypoint(117, 64, 0), 20, 7, 0, 0));
         assertEquals(false, HordeNavigation.isRouteValid(route, target, 20, 8, 0, 0));
         assertEquals(false, HordeNavigation.isRouteValid(route, target, 20, 7, 1, 0));
         assertEquals(false, HordeNavigation.isRouteValid(route, target, 20, 7, 0, 3));
