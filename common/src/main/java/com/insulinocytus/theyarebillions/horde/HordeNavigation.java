@@ -30,19 +30,43 @@ public final class HordeNavigation {
 
     public static void tick(Zombie zombie) {
         if (!(zombie.level() instanceof ServerLevel level) || !HordeIdentity.isHordeMember(zombie)) {
-            FOLLOWERS.remove(zombie);
+            Follower follower = FOLLOWERS.remove(zombie);
+            if (follower != null) {
+                follower.releaseAttackTarget(zombie);
+            }
             return;
         }
         HordePlanner.GroupIdentity group = HordeIdentity.group(zombie);
         if (group == null) {
             Follower follower = FOLLOWERS.remove(zombie);
             if (follower != null) {
+                follower.releaseAttackTarget(zombie);
                 follower.useVanilla(zombie);
             }
             return;
         }
         Follower follower = FOLLOWERS.computeIfAbsent(zombie, ignored -> new Follower(
                 level.getGameTime(), staggeredPathTick(zombie.tickCount, zombie.getId())));
+        double followRange = zombie.getAttributeValue(Attributes.FOLLOW_RANGE);
+        TargetingConditions conditions = TargetingConditions.forCombat().range(followRange);
+        if (zombie.getTarget() instanceof ServerPlayer player) {
+            String playerId = player.getUUID().toString();
+            boolean assigned = playerId.equals(follower.attackTargetId);
+            if (!isOwnedAttackTarget(
+                    group,
+                    playerId,
+                    !assigned
+                            || level.players().contains(player)
+                                    && HordeSpawner.isValidPlayer(player)
+                                    && conditions.test(zombie, player))) {
+                zombie.setTarget(null);
+            }
+            if (!assigned || zombie.getTarget() == null) {
+                follower.attackTargetId = null;
+            }
+        } else {
+            follower.attackTargetId = null;
+        }
         ServerPlayer target = nearestOwnedServerPlayer(
                 group, level.players(), zombie.position(), HordeSpawner::isValidPlayer);
         if (target == null) {
@@ -51,9 +75,7 @@ public final class HordeNavigation {
         }
 
         double targetDistance = zombie.distanceTo(target);
-        double followRange = zombie.getAttributeValue(Attributes.FOLLOW_RANGE);
         if (targetDistance <= followRange) {
-            TargetingConditions conditions = TargetingConditions.forCombat().range(followRange);
             ServerPlayer attackTarget = nearestOwnedServerPlayer(
                     group,
                     level.players(),
@@ -61,6 +83,7 @@ public final class HordeNavigation {
                     player -> HordeSpawner.isValidPlayer(player) && conditions.test(zombie, player));
             if (attackTarget != null) {
                 follower.useVanilla(zombie);
+                follower.attackTargetId = attackTarget.getUUID().toString();
                 zombie.setTarget(attackTarget);
                 return;
             }
@@ -242,6 +265,11 @@ public final class HordeNavigation {
         return nearest;
     }
 
+    static boolean isOwnedAttackTarget(
+            HordePlanner.GroupIdentity group, String playerId, boolean attackable) {
+        return attackable && group.memberIds().contains(playerId);
+    }
+
     static Mode mode(Mode current, double distance) {
         if (distance > 40.0) {
             return Mode.SHARED;
@@ -397,6 +425,7 @@ public final class HordeNavigation {
         private int failedCursor = -1;
         private boolean vanillaFallback;
         private boolean fallbackPathStarted;
+        private String attackTargetId;
 
         Follower(long tick, int nextPathTick) {
             lastSampleTick = tick;
@@ -411,6 +440,15 @@ public final class HordeNavigation {
             vanillaFallback = false;
             fallbackPathStarted = false;
             clearRoute();
+        }
+
+        private void releaseAttackTarget(Zombie zombie) {
+            if (attackTargetId != null
+                    && zombie.getTarget() instanceof ServerPlayer player
+                    && attackTargetId.equals(player.getUUID().toString())) {
+                zombie.setTarget(null);
+            }
+            attackTargetId = null;
         }
 
         private void clearRoute() {

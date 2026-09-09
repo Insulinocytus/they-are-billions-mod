@@ -16,6 +16,15 @@ class HordeNavigationTest {
     }
 
     @Test
+    void pursuesOnlyAttackablePlayersFromTheAssignedGroup() {
+        HordePlanner.GroupIdentity group = HordePlanner.GroupIdentity.of("owned");
+
+        assertEquals(true, HordeNavigation.isOwnedAttackTarget(group, "owned", true));
+        assertEquals(false, HordeNavigation.isOwnedAttackTarget(group, "owned", false));
+        assertEquals(false, HordeNavigation.isOwnedAttackTarget(group, "other", true));
+    }
+
+    @Test
     void followersShareAnImmutableTemplateButAdvanceIndependentCursors() {
         List<HordeNavigation.Waypoint> source = new ArrayList<>(List.of(
                 new HordeNavigation.Waypoint(0, 64, 0), new HordeNavigation.Waypoint(4, 64, 0)));
