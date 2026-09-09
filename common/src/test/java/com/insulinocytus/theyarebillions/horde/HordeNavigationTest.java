@@ -71,6 +71,22 @@ class HordeNavigationTest {
     }
 
     @Test
+    void eachFollowerReportsOnlyItsFirstFailureForARouteSegment() {
+        HordeNavigation.RouteEntry route = new HordeNavigation.RouteEntry(new HordeNavigation.RouteTemplate(List.of(
+                new HordeNavigation.Waypoint(4, 64, 0), new HordeNavigation.Waypoint(8, 64, 0))));
+        HordeNavigation.Follower first = new HordeNavigation.Follower(0);
+        HordeNavigation.Follower second = new HordeNavigation.Follower(0);
+
+        assertEquals(true, first.reportFailure(route, 0));
+        assertEquals(false, first.reportFailure(route, 0));
+        assertEquals(true, first.reportFailure(route, 1));
+        assertEquals(true, second.reportFailure(route, 0));
+
+        first.clearFailure();
+        assertEquals(true, first.reportFailure(route, 0));
+    }
+
+    @Test
     void choosesTheNearestValidPlayerFromTheSavedGroup() {
         HordePlanner.GroupIdentity group = HordePlanner.GroupIdentity.of("a", "b");
         List<HordePlanner.PlayerRef> players = List.of(
