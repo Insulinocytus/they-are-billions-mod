@@ -27,6 +27,10 @@ public final class HordeGameTests {
         helper.assertTrue(HordeIdentity.isOrdinaryZombie(zombie), "vanilla zombie should exist");
         helper.assertTrue(HordeIdentity.isHordeMember(zombie), "zombie should carry horde tag");
         helper.assertTrue(HordeIdentity.hasPersistentHordeTag(zombie), "horde tag should persist in NBT");
+        helper.assertTrue(zombie instanceof HordeMemberState, "zombie should expose synchronized horde state");
+        helper.assertTrue(
+                ((HordeMemberState) zombie).theyarebillions$isSyncedHordeMember(),
+                "horde state should be available to clients through the mod payload");
         helper.assertTrue(!zombie.isPersistenceRequired(), "horde tag must not force persistence");
         helper.assertTrue(!zombie.isBaby(), "horde members are adults");
         helper.assertTrue(!zombie.canPickUpLoot(), "horde members cannot pick up items");
@@ -62,6 +66,25 @@ public final class HordeGameTests {
         helper.succeed();
     }
 
+    public static void removingHordeTagRestoresServerBehavior(GameTestHelper helper) {
+        Zombie zombie = spawnHordeMember(helper, new BlockPos(2, 2, 2));
+        zombie.removeTag(HordeIdentity.HORDE_TAG);
+        helper.assertFalse(
+                ((HordeMemberState) zombie).theyarebillions$isSyncedHordeMember(),
+                "external tag removal must update the client identity mirror");
+        helper.assertFalse(HordeIdentity.isHordeMember(zombie), "server identity must use only the horde tag");
+        zombie.addTag(HordeIdentity.HORDE_TAG);
+        helper.assertTrue(
+                ((HordeMemberState) zombie).theyarebillions$isSyncedHordeMember(),
+                "external tag addition must update the client identity mirror");
+        zombie.removeTag(HordeIdentity.HORDE_TAG);
+        zombie.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.DIAMOND));
+        helper.assertTrue(
+                !zombie.getItemBySlot(EquipmentSlot.MAINHAND).isEmpty(),
+                "removing the tag must restore server behavior");
+        helper.succeed();
+    }
+
     public static void namingRemovesHordeMarkAndRestoresVanillaBehavior(GameTestHelper helper) {
         Zombie zombie = spawnHordeMember(helper, new BlockPos(2, 2, 2));
         zombie.setCanPickUpLoot(true);
@@ -71,6 +94,9 @@ public final class HordeGameTests {
         zombie.setCustomName(Component.literal("Pat"));
         helper.assertTrue(!HordeIdentity.isHordeMember(zombie), "naming must remove the horde mark");
         helper.assertTrue(!HordeIdentity.hasPersistentHordeTag(zombie), "naming must drop the persistent horde tag");
+        helper.assertTrue(
+                !((HordeMemberState) zombie).theyarebillions$isSyncedHordeMember(),
+                "naming must clear synchronized horde state");
         helper.assertTrue(zombie.canPickUpLoot(), "named zombies restore pickup");
         zombie.setBaby(true);
         helper.assertTrue(zombie.isBaby(), "named zombies can be babies");

@@ -2,6 +2,7 @@ package com.insulinocytus.theyarebillions.perf;
 
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
+import com.insulinocytus.theyarebillions.client.HordeClientRenderPolicy;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -25,6 +26,7 @@ public final class PerfReports {
         root.addProperty("recordedAt", Instant.now().toString());
         root.addProperty("warmupTicks", settings.warmupTicks());
         root.addProperty("durationTicks", settings.durationTicks());
+        root.addProperty("clientRenderOptimizationEnabled", HordeClientRenderPolicy.isEnabled());
         root.add("hardware", hardware());
         root.add("server", summaryJson(mspt, "averageMsptMs", "p95MsptMs"));
         if (frames.samples() > 0) {

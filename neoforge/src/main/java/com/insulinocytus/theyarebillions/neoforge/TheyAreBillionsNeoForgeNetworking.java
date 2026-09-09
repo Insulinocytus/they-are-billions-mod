@@ -1,6 +1,7 @@
 package com.insulinocytus.theyarebillions.neoforge;
 
 import com.insulinocytus.theyarebillions.TheyAreBillions;
+import com.insulinocytus.theyarebillions.horde.HordeIdentityPayload;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -12,9 +13,11 @@ public final class TheyAreBillionsNeoForgeNetworking {
     }
 
     public static void registerPayloadHandlers(RegisterPayloadHandlersEvent event) {
-        event.registrar(TheyAreBillions.VERSION).playBidirectional(
-                VersionPayload.TYPE, VersionPayload.STREAM_CODEC, (payload, context) -> {
-                });
+        var registrar = event.registrar(TheyAreBillions.VERSION);
+        registrar.playBidirectional(VersionPayload.TYPE, VersionPayload.STREAM_CODEC, (payload, context) -> {
+        });
+        registrar.playToClient(HordeIdentityPayload.TYPE, HordeIdentityPayload.STREAM_CODEC, (payload, context) ->
+                context.enqueueWork(() -> payload.apply(context.player().level())));
     }
 
     private record VersionPayload() implements CustomPacketPayload {

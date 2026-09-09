@@ -2,10 +2,12 @@ package com.insulinocytus.theyarebillions.fabric;
 
 import com.insulinocytus.theyarebillions.ModVersionHandshake;
 import com.insulinocytus.theyarebillions.TheyAreBillions;
+import com.insulinocytus.theyarebillions.horde.HordeIdentityPayload;
 import com.insulinocytus.theyarebillions.perf.PerfHarness;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
+import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerLoginConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerLoginNetworking;
 import net.fabricmc.loader.api.FabricLoader;
@@ -19,6 +21,7 @@ public final class TheyAreBillionsFabric implements ModInitializer {
     @Override
     public void onInitialize() {
         TheyAreBillions.initialize();
+        PayloadTypeRegistry.playS2C().register(HordeIdentityPayload.TYPE, HordeIdentityPayload.STREAM_CODEC);
         ServerTickEvents.START_SERVER_TICK.register(PerfHarness::onTickStart);
         ServerTickEvents.END_SERVER_TICK.register(TheyAreBillions::onServerTickEnd);
         ServerLoginConnectionEvents.QUERY_START.register((listener, server, sender, synchronizer) -> {

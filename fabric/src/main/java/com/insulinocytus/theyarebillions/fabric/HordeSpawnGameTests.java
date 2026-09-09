@@ -21,6 +21,11 @@ public final class HordeSpawnGameTests {
     }
 
     @GameTest(template = HordeGameTests.EMPTY_TEMPLATE)
+    public void removingHordeTagRestoresServerBehavior(GameTestHelper helper) {
+        HordeGameTests.removingHordeTagRestoresServerBehavior(helper);
+    }
+
+    @GameTest(template = HordeGameTests.EMPTY_TEMPLATE)
     public void namingRemovesHordeMarkAndRestoresVanillaBehavior(GameTestHelper helper) {
         HordeGameTests.namingRemovesHordeMarkAndRestoresVanillaBehavior(helper);
     }
