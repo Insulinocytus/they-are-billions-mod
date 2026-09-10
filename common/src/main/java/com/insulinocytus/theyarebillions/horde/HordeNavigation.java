@@ -49,16 +49,19 @@ public final class HordeNavigation {
                 level.getGameTime(), staggeredPathTick(zombie.tickCount, zombie.getId())));
         double followRange = zombie.getAttributeValue(Attributes.FOLLOW_RANGE);
         TargetingConditions conditions = TargetingConditions.forCombat().range(followRange);
+        ServerPlayer target = nearestOwnedServerPlayer(
+                group, level.players(), zombie.position(), HordeSpawner::isValidPlayer);
         if (zombie.getTarget() instanceof ServerPlayer player) {
             String playerId = player.getUUID().toString();
             boolean assigned = playerId.equals(follower.attackTargetId);
-            if (!isOwnedAttackTarget(
+            if (!shouldKeepPlayerTarget(
                     group,
                     playerId,
-                    !assigned
-                            || level.players().contains(player)
-                                    && HordeSpawner.isValidPlayer(player)
-                                    && conditions.test(zombie, player))) {
+                    assigned,
+                    level.players().contains(player)
+                            && HordeSpawner.isValidPlayer(player)
+                            && conditions.test(zombie, player),
+                    target != null)) {
                 zombie.setTarget(null);
             }
             if (!assigned || zombie.getTarget() == null) {
@@ -67,8 +70,6 @@ public final class HordeNavigation {
         } else {
             follower.attackTargetId = null;
         }
-        ServerPlayer target = nearestOwnedServerPlayer(
-                group, level.players(), zombie.position(), HordeSpawner::isValidPlayer);
         if (target == null) {
             follower.useVanilla(zombie);
             return;
@@ -128,7 +129,7 @@ public final class HordeNavigation {
             long tick) {
         Waypoint targetPoint = Waypoint.of(target.blockPosition());
         if (follower.route == null
-                || !cache.valid(level, follower.route, targetPoint, tick, follower.cursor)) {
+                || !follower.route.valid(level, targetPoint, tick, follower.cursor)) {
             RouteKey key = RouteKey.of(zombie, target.blockPosition());
             follower.route = cache.route(level, zombie, target.blockPosition(), key, tick);
             follower.cursor = 0;
@@ -265,9 +266,16 @@ public final class HordeNavigation {
         return nearest;
     }
 
-    static boolean isOwnedAttackTarget(
-            HordePlanner.GroupIdentity group, String playerId, boolean attackable) {
-        return attackable && group.memberIds().contains(playerId);
+    static boolean shouldKeepPlayerTarget(
+            HordePlanner.GroupIdentity group,
+            String playerId,
+            boolean assigned,
+            boolean attackable,
+            boolean hasValidOwnedPlayer) {
+        if (!hasValidOwnedPlayer) {
+            return !assigned;
+        }
+        return group.memberIds().contains(playerId) && (!assigned || attackable);
     }
 
     static Mode mode(Mode current, double distance) {
@@ -507,6 +515,24 @@ public final class HordeNavigation {
         private void succeeded(int segment) {
             failures[segment] = 0;
         }
+
+        private boolean valid(ServerLevel level, Waypoint target, long tick, int cursor) {
+            if (invalid) {
+                return false;
+            }
+            if (validatedTick != tick) {
+                validatedTick = tick;
+                terrainValid = template.terrainFingerprint() == terrainFingerprint(level, template.waypoints());
+            }
+            int failureCount = cursor < failures.length ? failures[cursor] : 3;
+            return isRouteValid(
+                    template,
+                    target,
+                    tick,
+                    terrainValid ? template.terrainFingerprint() : Long.MIN_VALUE,
+                    cursor,
+                    failureCount);
+        }
     }
 
     private static final class RouteCache {
@@ -519,7 +545,7 @@ public final class HordeNavigation {
                     || tick - entry.template.createdTick() >= ROUTE_TTL_TICKS);
             RouteEntry existing = entries.get(key);
             if (existing != null) {
-                if (valid(level, existing, Waypoint.of(target), tick, 0)
+                if (existing.valid(level, Waypoint.of(target), tick, 0)
                         && connectionWaypoint(existing.template, 0, Waypoint.of(zombie.blockPosition())) >= 0) {
                     return existing;
                 }
@@ -549,25 +575,6 @@ public final class HordeNavigation {
 
         private void evict(RouteEntry route) {
             entries.values().removeIf(entry -> entry == route);
-        }
-
-        private boolean valid(ServerLevel level, RouteEntry route, Waypoint target, long tick, int cursor) {
-            if (route.invalid) {
-                return false;
-            }
-            if (route.validatedTick != tick) {
-                route.validatedTick = tick;
-                route.terrainValid = route.template.terrainFingerprint()
-                        == terrainFingerprint(level, route.template.waypoints());
-            }
-            int failures = cursor < route.failures.length ? route.failures[cursor] : 3;
-            return isRouteValid(
-                    route.template,
-                    target,
-                    tick,
-                    route.terrainValid ? route.template.terrainFingerprint() : Long.MIN_VALUE,
-                    cursor,
-                    failures);
         }
 
         private boolean acquire(long tick) {

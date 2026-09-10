@@ -16,12 +16,14 @@ class HordeNavigationTest {
     }
 
     @Test
-    void pursuesOnlyAttackablePlayersFromTheAssignedGroup() {
+    void keepsOnlyTheAppropriatePlayerTargetForTheGroupState() {
         HordePlanner.GroupIdentity group = HordePlanner.GroupIdentity.of("owned");
 
-        assertEquals(true, HordeNavigation.isOwnedAttackTarget(group, "owned", true));
-        assertEquals(false, HordeNavigation.isOwnedAttackTarget(group, "owned", false));
-        assertEquals(false, HordeNavigation.isOwnedAttackTarget(group, "other", true));
+        assertEquals(true, HordeNavigation.shouldKeepPlayerTarget(group, "owned", true, true, true));
+        assertEquals(false, HordeNavigation.shouldKeepPlayerTarget(group, "owned", true, false, true));
+        assertEquals(false, HordeNavigation.shouldKeepPlayerTarget(group, "other", false, true, true));
+        assertEquals(true, HordeNavigation.shouldKeepPlayerTarget(group, "other", false, true, false));
+        assertEquals(false, HordeNavigation.shouldKeepPlayerTarget(group, "owned", true, true, false));
     }
 
     @Test
