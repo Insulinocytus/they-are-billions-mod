@@ -9,7 +9,6 @@
     "GameRulesIntegerValueAccessor",
     "LivingEntityMixin",
     "MobMixin",
-    "PathNavigationAccessor",
     "ServerEntityMixin",
     "SpawnPlacementsMixin",
     "ZombieMixin"

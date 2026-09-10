@@ -2,7 +2,6 @@ package com.insulinocytus.theyarebillions.mixin;
 
 import com.insulinocytus.theyarebillions.horde.HordeIdentity;
 import com.insulinocytus.theyarebillions.horde.HordeMemberState;
-import com.insulinocytus.theyarebillions.horde.HordeNavigation;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.monster.Zombie;
 import org.spongepowered.asm.mixin.Mixin;
@@ -17,6 +16,7 @@ public abstract class ZombieMixin implements HordeMemberState {
     @Unique
     private boolean theyarebillions$hordeMember;
 
+
     @Override
     public boolean theyarebillions$isSyncedHordeMember() {
         return theyarebillions$hordeMember;
@@ -27,10 +27,6 @@ public abstract class ZombieMixin implements HordeMemberState {
         theyarebillions$hordeMember = hordeMember;
     }
 
-    @Inject(method = "aiStep", at = @At("TAIL"))
-    private void theyarebillions$followPlayerGroup(CallbackInfo ci) {
-        HordeNavigation.tick((Zombie) (Object) this);
-    }
 
     @Inject(method = "convertsInWater", at = @At("HEAD"), cancellable = true)
     private void theyarebillions$noDrownedConversion(CallbackInfoReturnable<Boolean> cir) {
