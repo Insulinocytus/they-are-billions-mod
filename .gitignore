@@ -5,6 +5,11 @@ run/
 */run/
 .idea/
 *.iml
+.project
+.classpath
+.settings/
+bin/
+logs/
 perf/cache/
 perf/runs/
 perf/results/

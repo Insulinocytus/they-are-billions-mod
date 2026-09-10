@@ -28,6 +28,11 @@ public final class HordeSpawnGameTests {
     }
 
     @GameTest(template = "empty")
+    public static void hordeMemberKeepsItsPlayerGroup(GameTestHelper helper) {
+        HordeGameTests.hordeMemberKeepsItsPlayerGroup(helper);
+    }
+
+    @GameTest(template = "empty")
     public static void hordeMemberDeathDropsNothing(GameTestHelper helper) {
         HordeGameTests.hordeMemberDeathDropsNothing(helper);
     }

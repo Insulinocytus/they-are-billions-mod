@@ -16,6 +16,7 @@ public abstract class ZombieMixin implements HordeMemberState {
     @Unique
     private boolean theyarebillions$hordeMember;
 
+
     @Override
     public boolean theyarebillions$isSyncedHordeMember() {
         return theyarebillions$hordeMember;
@@ -25,6 +26,7 @@ public abstract class ZombieMixin implements HordeMemberState {
     public void theyarebillions$setSyncedHordeMember(boolean hordeMember) {
         theyarebillions$hordeMember = hordeMember;
     }
+
 
     @Inject(method = "convertsInWater", at = @At("HEAD"), cancellable = true)
     private void theyarebillions$noDrownedConversion(CallbackInfoReturnable<Boolean> cir) {
