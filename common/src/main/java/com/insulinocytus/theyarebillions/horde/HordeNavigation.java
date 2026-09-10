@@ -133,15 +133,23 @@ public final class HordeNavigation {
             RouteCache cache,
             long tick) {
         Waypoint targetPoint = Waypoint.of(target.blockPosition());
+        boolean routeBuildFailed = false;
         if (follower.route == null
                 || !follower.route.valid(targetPoint, tick, follower.cursor)) {
             RouteKey key = RouteKey.of(zombie, target.blockPosition());
-            follower.route = cache.route(level, zombie, target.blockPosition(), key, tick);
+            RouteResult result = cache.route(level, zombie, target.blockPosition(), key, tick);
+            follower.route = result.route();
+            routeBuildFailed = result.pathfindingFailed();
             follower.cursor = 0;
             follower.clearFailure();
         }
         RouteEntry route = follower.route;
         if (route == null) {
+            if (routeBuildFailed) {
+                follower.useVanilla(zombie);
+                follower.vanillaFallback = true;
+                followVanillaFallback(cache, zombie, target, follower, tick);
+            }
             return;
         }
 
@@ -152,6 +160,7 @@ public final class HordeNavigation {
             follower.cursor = advanceCursor(route.template, follower.cursor);
         }
         if (follower.cursor >= route.template.waypoints().size()) {
+            cache.evict(route);
             follower.clearRoute();
             return;
         }
@@ -448,6 +457,9 @@ public final class HordeNavigation {
         }
     }
 
+    private record RouteResult(RouteEntry route, boolean pathfindingFailed) {
+    }
+
     static final class Follower {
         private Mode mode = Mode.VANILLA;
         private RouteEntry route;
@@ -592,7 +604,7 @@ public final class HordeNavigation {
             }
         }
 
-        private RouteEntry route(ServerLevel level, Zombie zombie, BlockPos target, RouteKey key, long tick) {
+        private RouteResult route(ServerLevel level, Zombie zombie, BlockPos target, RouteKey key, long tick) {
             Waypoint position = Waypoint.of(zombie.blockPosition());
             Waypoint targetPoint = Waypoint.of(target);
             RouteEntry existing = entries.get(key);
@@ -602,22 +614,22 @@ public final class HordeNavigation {
                     existing = null;
                 } else if (connectionWaypoint(existing.template, 0, position) >= 0
                         && makesForwardProgress(position, targetPoint, existing.template.waypoints().getLast())) {
-                    return existing;
+                    return new RouteResult(existing, false);
                 }
             }
             if (!acquire(tick)) {
-                return null;
+                return new RouteResult(null, false);
             }
             Path path = zombie.getNavigation().createPath(target, 0);
             if (path == null || path.getNodeCount() == 0) {
-                return null;
+                return new RouteResult(null, true);
             }
             List<Waypoint> waypoints = java.util.stream.IntStream.range(0, path.getNodeCount())
                     .mapToObj(path::getNodePos)
                     .map(Waypoint::of)
                     .toList();
             if (!makesForwardProgress(position, targetPoint, waypoints.getLast())) {
-                return null;
+                return new RouteResult(null, true);
             }
             RouteTemplate template = new RouteTemplate(
                     waypoints, targetPoint, tick, terrainFingerprint(level, waypoints));
@@ -626,7 +638,11 @@ public final class HordeNavigation {
             if (existing == null) {
                 entries.put(key, created);
             }
-            return created;
+            return new RouteResult(created, false);
+        }
+
+        private void evict(RouteEntry route) {
+            entries.values().removeIf(entry -> entry == route);
         }
 
         private boolean acquire(long tick) {
