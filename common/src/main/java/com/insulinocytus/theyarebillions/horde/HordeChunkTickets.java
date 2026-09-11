@@ -56,10 +56,19 @@ public final class HordeChunkTickets {
         plan.acquireOrRenew().forEach(chunk -> acquireOrRenew(level, chunk));
         assignGroups(members, plan.groupAssignments());
         removeMembers(members, plan.removeMemberIds(), OFFLINE_CLEANUP_LIMIT);
-        plan.release().forEach(chunk -> release(level, chunk));
+
+        Map<HordePlanner.ChunkRef, Integer> nextCounts = new HashMap<>(plan.desiredCounts());
+        loadedMembers(level).stream()
+                .filter(zombie -> !withinRange(level, zombie.getX(), zombie.getY(), zombie.getZ()))
+                .filter(zombie -> !zombie.isPersistenceRequired() && !zombie.hasCustomName())
+                .forEach(zombie -> nextCounts.merge(chunk(zombie), 1, Integer::sum));
+        nextCounts.keySet().forEach(chunk -> acquireOrRenew(level, chunk));
+        plan.release().stream()
+                .filter(chunk -> !nextCounts.containsKey(chunk))
+                .forEach(chunk -> release(level, chunk));
 
         state.activeCounts.clear();
-        state.activeCounts.putAll(plan.desiredCounts());
+        state.activeCounts.putAll(nextCounts);
         recountLoadedOccupancy(level, data, loadedMembers(level));
         return true;
     }
