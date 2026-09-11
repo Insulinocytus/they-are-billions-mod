@@ -5,6 +5,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.entity.EntityType;
@@ -15,6 +16,7 @@ import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.monster.ZombieVillager;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.ChunkPos;
 
@@ -136,6 +138,59 @@ public final class HordeGameTests {
                         EntityType.ZOMBIE, helper.getLevel(), MobSpawnType.CHUNK_GENERATION, feet, random),
                 "ordinary zombie chunk generation is taken over");
         helper.succeed();
+    }
+    public static void hordeDiggingUsesEmptySurvivalFakePlayerDrops(GameTestHelper helper) {
+        Zombie zombie = spawnHordeMember(helper, new BlockPos(2, 2, 2));
+        zombie.setCanBreakDoors(true);
+        HordeNavigation.tick(zombie);
+        helper.assertFalse(zombie.canBreakDoors(), "horde members should not keep vanilla door breaking");
+        CompoundTag saved = new CompoundTag();
+        zombie.saveWithoutId(saved);
+        Zombie restored = EntityType.ZOMBIE.create(helper.getLevel());
+        helper.assertTrue(restored != null, "restored zombie should exist");
+        restored.load(saved);
+        restored.removeTag(HordeIdentity.HORDE_TAG);
+        HordeNavigation.tick(restored);
+        helper.assertTrue(restored.canBreakDoors(), "door breaking should restore after reload and horde removal");
+        zombie.removeTag(HordeIdentity.HORDE_TAG);
+        HordeNavigation.tick(zombie);
+        helper.assertTrue(zombie.canBreakDoors(), "leaving the horde should restore vanilla door breaking");
+        HordeIdentity.mark(zombie);
+
+        BlockPos obstacle = new BlockPos(3, 2, 2);
+        BlockPos destination = helper.absolutePos(new BlockPos(4, 2, 2));
+        helper.setBlock(obstacle, Blocks.BEDROCK);
+        helper.assertTrue(
+                HordeBlockBreaking.start(helper.getLevel(), zombie, destination, null).digging() == null,
+                "unbreakable blocks should stay intact");
+
+        helper.setBlock(obstacle, Blocks.DIRT);
+        HordeBlockBreaking.StartResult denied;
+        helper.getLevel().getGameRules().getRule(GameRules.RULE_MOBGRIEFING).set(false, helper.getLevel().getServer());
+        try {
+            denied = HordeBlockBreaking.start(helper.getLevel(), zombie, destination, null);
+        } finally {
+            helper.getLevel().getGameRules().getRule(GameRules.RULE_MOBGRIEFING).set(true, helper.getLevel().getServer());
+        }
+        helper.assertTrue(denied.deniedPos() != null, "mobGriefing should deny digging");
+
+        HordeBlockBreaking.StartResult start = HordeBlockBreaking.start(helper.getLevel(), zombie, destination, null);
+        helper.assertTrue(start.digging() != null, "adjacent dirt should start a digging point");
+        ServerPlayer player = HordeBlockBreakingAccess.player(helper.getLevel());
+        helper.assertTrue(
+                HordeBlockBreakingAccess.PROFILE.equals(player.getGameProfile()),
+                "digging should use the mod GameProfile");
+        helper.assertTrue(player.gameMode.isSurvival(), "digging should use survival mode");
+        helper.assertTrue(player.getMainHandItem().isEmpty(), "digging should use an empty hand");
+
+        helper.onEachTick(() -> HordeBlockBreaking.tick(helper.getLevel(), zombie, start.digging()));
+        helper.succeedWhen(() -> {
+            helper.assertBlockPresent(Blocks.AIR, obstacle);
+            helper.assertTrue(
+                    helper.getEntities(EntityType.ITEM).stream()
+                            .anyMatch(item -> item.getItem().is(Items.DIRT)),
+                    "dirt should use player drop semantics");
+        });
     }
 
     public static void hordeTicketMakesChunkEntityTick(GameTestHelper helper) {
