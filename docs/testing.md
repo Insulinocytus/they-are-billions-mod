@@ -24,7 +24,7 @@ Fabric 与 NeoForge 的 Platform Build 分别检查最终 JAR 是否存在，并
 
 ## Server Integration Tests
 
-Fabric 与 NeoForge 分别运行 GameTest Server（`runGameTestServer`）。当前覆盖验证模组能生成带持久化尸潮标记的原版 Zombie，以及尸潮身份、命名脱离、死亡掉落和显式生成不被接管。
+Fabric 与 NeoForge 分别运行 GameTest Server（`runGameTestServer`）。当前覆盖验证模组能生成带持久化尸潮标记的原版 Zombie，以及尸潮身份、命名脱离、死亡掉落、显式生成、近距离攻击、单格门洞通行和玩家推挤行为。
 
 ## Client Startup Smoke Tests
 

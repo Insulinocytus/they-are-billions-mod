@@ -57,6 +57,21 @@ public final class HordeSpawnGameTests {
         HordeGameTests.ordinaryZombieNaturalPopulationStaysTakenOver(helper);
     }
 
+    @GameTest(template = "empty", timeoutTicks = 200)
+    public static void nearbyMeleeAttackStillHits(GameTestHelper helper) {
+        HordeGameTests.nearbyMeleeAttackStillHits(helper);
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 200)
+    public static void hordeMemberPassesOneBlockDoorway(GameTestHelper helper) {
+        HordeGameTests.hordeMemberPassesOneBlockDoorway(helper);
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 200)
+    public static void nearbyPlayerStillGetsPushed(GameTestHelper helper) {
+        HordeGameTests.nearbyPlayerStillGetsPushed(helper);
+    }
+
     @GameTest(template = "empty")
     public static void namingDuringFinalizeKeepsVanillaTraits(GameTestHelper helper) {
         helper.getLevel().getServer().setDifficulty(Difficulty.NORMAL, true);
