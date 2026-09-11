@@ -1,8 +1,10 @@
 package com.insulinocytus.theyarebillions;
 
 import com.insulinocytus.theyarebillions.horde.HordeGameRules;
+import com.insulinocytus.theyarebillions.horde.HordeChunkTickets;
 import com.insulinocytus.theyarebillions.horde.HordeSpawner;
 import com.insulinocytus.theyarebillions.perf.PerfHarness;
+import dev.architectury.event.events.common.LifecycleEvent;
 import net.minecraft.server.MinecraftServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,6 +20,7 @@ public final class TheyAreBillions {
 
     public static void initialize() {
         HordeGameRules.register();
+        LifecycleEvent.SERVER_LEVEL_UNLOAD.register(HordeChunkTickets::onLevelUnload);
         LOGGER.info("{} {} loaded", MOD_NAME, VERSION);
         PerfHarness.initialize();
     }

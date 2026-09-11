@@ -56,9 +56,7 @@ public final class HordeIdentity {
 
     public static void mark(Entity entity, HordePlanner.GroupIdentity group) {
         mark(entity);
-        for (String memberId : group.memberIds()) {
-            entity.addTag(GROUP_TAG_PREFIX + memberId);
-        }
+        writeGroup(entity, group);
     }
 
     public static HordePlanner.GroupIdentity group(Entity entity) {
@@ -68,6 +66,24 @@ public final class HordeIdentity {
                 .toList();
         return members.isEmpty() ? null : new HordePlanner.GroupIdentity(members);
     }
+    public static void assignGroup(Entity entity, HordePlanner.GroupIdentity group) {
+        clearGroup(entity);
+        writeGroup(entity, group);
+    }
+
+    private static void writeGroup(Entity entity, HordePlanner.GroupIdentity group) {
+        for (String memberId : group.memberIds()) {
+            entity.addTag(GROUP_TAG_PREFIX + memberId);
+        }
+    }
+
+    private static void clearGroup(Entity entity) {
+        entity.getTags().stream()
+                .filter(tag -> tag.startsWith(GROUP_TAG_PREFIX))
+                .toList()
+                .forEach(entity::removeTag);
+    }
+
 
     public static boolean hasPersistentGroup(Entity entity, HordePlanner.GroupIdentity group) {
         CompoundTag nbt = new CompoundTag();
@@ -96,10 +112,7 @@ public final class HordeIdentity {
     public static void detachIfNamed(Entity entity) {
         if (isHordeMember(entity) && entity.hasCustomName()) {
             entity.removeTag(HORDE_TAG);
-            entity.getTags().stream()
-                    .filter(tag -> tag.startsWith(GROUP_TAG_PREFIX))
-                    .toList()
-                    .forEach(entity::removeTag);
+            clearGroup(entity);
         }
     }
 

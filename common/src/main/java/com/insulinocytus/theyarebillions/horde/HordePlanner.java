@@ -19,6 +19,8 @@ public final class HordePlanner {
     public static final int SPAWN_RANGE_MIN = 128;
     public static final int SPAWN_RANGE_MAX = 144;
     public static final int GROUP_RANGE = 128;
+    public static final int TICKET_RANGE = 160;
+
     private static final long DAY_LENGTH = 24000L;
     private static final long UNOBSERVED_DAY_TIME = Long.MIN_VALUE;
 
@@ -77,6 +79,41 @@ public final class HordePlanner {
         }
         return new Plan(desired, quota, MAX_FAILED_SPAWN_ATTEMPTS_PER_TICK, groupPlans, nightState);
     }
+    public static TicketPlan planTickets(TicketSnapshot snapshot) {
+        List<String> removeMemberIds = snapshot.members().stream()
+                .filter(MemberRef::tagged)
+                .filter(member -> !member.persistent())
+                .filter(member -> snapshot.validPlayers().isEmpty() || !withinTicketRange(member, snapshot.validPlayers()))
+                .map(MemberRef::id)
+                .sorted()
+                .toList();
+        if (snapshot.validPlayers().isEmpty()) {
+            return new TicketPlan(
+                    Map.of(), List.of(), snapshot.activeCounts().keySet().stream().sorted().toList(), removeMemberIds, Map.of());
+        }
+
+        List<PlayerGroup> groups = connectedGroups(snapshot.validPlayers());
+        Map<ChunkRef, Integer> desiredCounts = new LinkedHashMap<>();
+        Map<String, GroupIdentity> groupAssignments = new LinkedHashMap<>();
+        snapshot.members().stream()
+                .filter(MemberRef::tagged)
+                .filter(member -> withinTicketRange(member, snapshot.validPlayers()))
+                .sorted(Comparator.comparing(MemberRef::id))
+                .forEach(member -> {
+                    desiredCounts.merge(member.chunk(), 1, Integer::sum);
+                    groupAssignments.put(member.id(), nearestGroup(member, groups).identity());
+                });
+        Map<ChunkRef, Integer> sortedCounts = desiredCounts.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .collect(LinkedHashMap::new, (map, entry) -> map.put(entry.getKey(), entry.getValue()), Map::putAll);
+        List<ChunkRef> acquireOrRenew = List.copyOf(sortedCounts.keySet());
+        List<ChunkRef> release = snapshot.activeCounts().keySet().stream()
+                .filter(chunk -> !sortedCounts.containsKey(chunk))
+                .sorted()
+                .toList();
+        return new TicketPlan(sortedCounts, acquireOrRenew, release, removeMemberIds, groupAssignments);
+    }
+
 
     public static int desiredCount(long dayTime, int target) {
         int time = dayTimeOfDay(dayTime);
@@ -226,6 +263,44 @@ public final class HordePlanner {
         double dz = left.z() - right.z();
         return dx * dx + dy * dy + dz * dz <= (double) GROUP_RANGE * GROUP_RANGE;
     }
+    private static boolean withinTicketRange(MemberRef member, List<PlayerRef> players) {
+        double maxDistanceSquared = (double) TICKET_RANGE * TICKET_RANGE;
+        for (PlayerRef player : players) {
+            double dx = member.x() - player.x();
+            double dy = member.y() - player.y();
+            double dz = member.z() - player.z();
+            if (dx * dx + dy * dy + dz * dz <= maxDistanceSquared) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static PlayerGroup nearestGroup(MemberRef member, List<PlayerGroup> groups) {
+        PlayerGroup nearest = groups.getFirst();
+        double nearestDistance = distanceSquared(member, nearest);
+        for (int i = 1; i < groups.size(); i++) {
+            PlayerGroup candidate = groups.get(i);
+            double distance = distanceSquared(member, candidate);
+            if (distance < nearestDistance) {
+                nearest = candidate;
+                nearestDistance = distance;
+            }
+        }
+        return nearest;
+    }
+
+    private static double distanceSquared(MemberRef member, PlayerGroup group) {
+        double nearest = Double.POSITIVE_INFINITY;
+        for (PlayerRef player : group.members()) {
+            double dx = member.x() - player.x();
+            double dy = member.y() - player.y();
+            double dz = member.z() - player.z();
+            nearest = Math.min(nearest, dx * dx + dy * dy + dz * dz);
+        }
+        return nearest;
+    }
+
 
     private static int find(int[] parent, int index) {
         int root = index;
@@ -323,6 +398,45 @@ public final class HordePlanner {
 
     public record PlayerRef(String id, double x, double y, double z) {
     }
+    public record MemberRef(String id, double x, double y, double z, boolean tagged, boolean persistent) {
+        public ChunkRef chunk() {
+            return new ChunkRef(
+                    Math.floorDiv((int) Math.floor(x), 16), Math.floorDiv((int) Math.floor(z), 16));
+        }
+    }
+
+    public record ChunkRef(int x, int z) implements Comparable<ChunkRef> {
+        @Override
+        public int compareTo(ChunkRef other) {
+            int xComparison = Integer.compare(x, other.x);
+            return xComparison != 0 ? xComparison : Integer.compare(z, other.z);
+        }
+    }
+
+    public record TicketSnapshot(
+            List<PlayerRef> validPlayers, List<MemberRef> members, Map<ChunkRef, Integer> activeCounts) {
+        public TicketSnapshot {
+            validPlayers = List.copyOf(validPlayers);
+            members = List.copyOf(members);
+            activeCounts = Map.copyOf(activeCounts);
+        }
+    }
+
+    public record TicketPlan(
+            Map<ChunkRef, Integer> desiredCounts,
+            List<ChunkRef> acquireOrRenew,
+            List<ChunkRef> release,
+            List<String> removeMemberIds,
+            Map<String, GroupIdentity> groupAssignments) {
+        public TicketPlan {
+            desiredCounts = Map.copyOf(desiredCounts);
+            acquireOrRenew = List.copyOf(acquireOrRenew);
+            release = List.copyOf(release);
+            removeMemberIds = List.copyOf(removeMemberIds);
+            groupAssignments = Map.copyOf(groupAssignments);
+        }
+    }
+
 
     public record NightState(
             long observedDayTime, Map<GroupIdentity, Double> directions, int rotation, long initializedNight) {

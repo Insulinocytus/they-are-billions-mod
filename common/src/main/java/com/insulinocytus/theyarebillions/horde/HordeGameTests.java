@@ -1,5 +1,6 @@
 package com.insulinocytus.theyarebillions.horde;
 
+import com.insulinocytus.theyarebillions.HordeChunkTicketAccess;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
@@ -15,6 +16,7 @@ import net.minecraft.world.entity.monster.ZombieVillager;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.ChunkPos;
 
 public final class HordeGameTests {
     public static final String EMPTY_TEMPLATE = "theyarebillions:empty";
@@ -133,6 +135,26 @@ public final class HordeGameTests {
                 SpawnPlacements.checkSpawnRules(
                         EntityType.ZOMBIE, helper.getLevel(), MobSpawnType.CHUNK_GENERATION, feet, random),
                 "ordinary zombie chunk generation is taken over");
+        helper.succeed();
+    }
+
+    public static void hordeTicketMakesChunkEntityTick(GameTestHelper helper) {
+        ChunkPos origin = new ChunkPos(helper.absolutePos(BlockPos.ZERO));
+        ChunkPos distant = new ChunkPos(origin.x + 12, origin.z);
+        helper.onEachTick(() -> HordeChunkTicketAccess.acquireOrRenew(helper.getLevel(), distant));
+        helper.succeedWhen(() -> {
+            helper.assertTrue(
+                    helper.getLevel().isPositionEntityTicking(distant.getMiddleBlockPosition(0)),
+                    "horde ticket should make the chunk entity tick");
+            HordeChunkTicketAccess.release(helper.getLevel(), distant);
+        });
+    }
+
+    public static void hordeMemberIgnoresVanillaDistanceDespawn(GameTestHelper helper) {
+        Zombie zombie = spawnHordeMember(helper, new BlockPos(2, 2, 2));
+        helper.assertFalse(
+                zombie.removeWhenFarAway((double) 200 * 200),
+                "horde members should use the common 160-block cleanup instead of vanilla despawn");
         helper.succeed();
     }
 

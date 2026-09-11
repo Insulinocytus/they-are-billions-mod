@@ -1,6 +1,7 @@
 package com.insulinocytus.theyarebillions.mixin;
 
 import com.insulinocytus.theyarebillions.horde.HordeIdentity;
+import com.insulinocytus.theyarebillions.horde.HordeChunkTickets;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.Entity;
@@ -24,6 +25,11 @@ public abstract class EntityMixin {
         if (cir.getReturnValue() && HordeIdentity.HORDE_TAG.equals(tag)) {
             HordeIdentity.syncClientState((Entity) (Object) this);
         }
+    }
+
+    @Inject(method = "setPos(DDD)V", at = @At("HEAD"))
+    private void theyarebillions$acquireDestinationTicket(double x, double y, double z, CallbackInfo ci) {
+        HordeChunkTickets.beforePositionChange((Entity) (Object) this, x, y, z);
     }
 
     @Inject(method = "setCustomName", at = @At("TAIL"))
