@@ -54,4 +54,19 @@ public final class HordeSpawnGameTests {
     public void nearbyPlayerStillGetsPushed(GameTestHelper helper) {
         HordeGameTests.nearbyPlayerStillGetsPushed(helper);
     }
+
+    @GameTest(template = HordeGameTests.EMPTY_TEMPLATE, timeoutTicks = 400)
+    public void hordeTicketMakesChunkEntityTick(GameTestHelper helper) {
+        HordeGameTests.hordeTicketMakesChunkEntityTick(helper);
+    }
+
+    @GameTest(template = HordeGameTests.EMPTY_TEMPLATE)
+    public void hordeMemberIgnoresVanillaDistanceDespawn(GameTestHelper helper) {
+        HordeGameTests.hordeMemberIgnoresVanillaDistanceDespawn(helper);
+    }
+
+    @GameTest(template = HordeGameTests.EMPTY_TEMPLATE, timeoutTicks = 40)
+    public void hordeDiggingUsesEmptySurvivalFakePlayerDrops(GameTestHelper helper) {
+        HordeGameTests.hordeDiggingUsesEmptySurvivalFakePlayerDrops(helper);
+    }
 }

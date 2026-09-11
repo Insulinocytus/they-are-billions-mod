@@ -65,6 +65,15 @@ public abstract class MobMixin {
         theyarebillions$managedNavigation = managedNavigation;
     }
 
+    @Inject(method = "removeWhenFarAway", at = @At("HEAD"), cancellable = true)
+    private void theyarebillions$keepHordeUntilCommonCleanup(
+            double distanceSquared, CallbackInfoReturnable<Boolean> cir) {
+        Mob mob = (Mob) (Object) this;
+        if (HordeIdentity.isHordeMember(mob) && !mob.isPersistenceRequired()) {
+            cir.setReturnValue(false);
+        }
+    }
+
     @Inject(method = "canPickUpLoot", at = @At("HEAD"), cancellable = true)
     private void theyarebillions$noHordePickup(CallbackInfoReturnable<Boolean> cir) {
         if (HordeIdentity.isHordeMember((Entity) (Object) this)) {

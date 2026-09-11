@@ -1,5 +1,6 @@
 package com.insulinocytus.theyarebillions.horde;
 
+import com.insulinocytus.theyarebillions.HordeChunkTicketAccess;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
@@ -11,11 +12,14 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.SpawnPlacements;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.monster.ZombieVillager;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
@@ -139,10 +143,12 @@ public final class HordeGameTests {
                 "ordinary zombie chunk generation is taken over");
         helper.succeed();
     }
+
     public static void nearbyMeleeAttackStillHits(GameTestHelper helper) {
         helper.setNight();
         Zombie zombie = spawnHordeMember(helper, new BlockPos(2, 2, 2));
         nearbyPlayer(helper, zombie.getX() + 2.0, zombie.getY(), zombie.getZ());
+        zombie.getAttribute(Attributes.FOLLOW_RANGE).setBaseValue(1.5);
         Villager villager = helper.spawn(EntityType.VILLAGER, helper.relativeVec(zombie.position()).add(1.0, 0.0, 0.0));
         villager.setNoAi(true);
         float health = villager.getHealth();
@@ -168,6 +174,7 @@ public final class HordeGameTests {
             helper.setBlock(new BlockPos(4, y, 3), Blocks.STONE);
         }
         Zombie zombie = spawnHordeMember(helper, new BlockPos(2, 2, 1));
+        nearbyPlayer(helper, zombie.getX(), zombie.getY(), zombie.getZ() + 3.0);
         Villager villager = helper.spawn(EntityType.VILLAGER, new Vec3(2.5, 2.0, 4.5));
         villager.setNoAi(true);
         zombie.setTarget(villager);
@@ -197,6 +204,79 @@ public final class HordeGameTests {
         return player;
     }
 
+    public static void hordeDiggingUsesEmptySurvivalFakePlayerDrops(GameTestHelper helper) {
+        Zombie zombie = spawnHordeMember(helper, new BlockPos(2, 2, 2));
+        zombie.setCanBreakDoors(true);
+        HordeNavigation.tick(zombie);
+        helper.assertFalse(zombie.canBreakDoors(), "horde members should not keep vanilla door breaking");
+        CompoundTag saved = new CompoundTag();
+        zombie.saveWithoutId(saved);
+        Zombie restored = EntityType.ZOMBIE.create(helper.getLevel());
+        helper.assertTrue(restored != null, "restored zombie should exist");
+        restored.load(saved);
+        restored.removeTag(HordeIdentity.HORDE_TAG);
+        HordeNavigation.tick(restored);
+        helper.assertTrue(restored.canBreakDoors(), "door breaking should restore after reload and horde removal");
+        zombie.removeTag(HordeIdentity.HORDE_TAG);
+        HordeNavigation.tick(zombie);
+        helper.assertTrue(zombie.canBreakDoors(), "leaving the horde should restore vanilla door breaking");
+        HordeIdentity.mark(zombie);
+
+        BlockPos obstacle = new BlockPos(3, 2, 2);
+        BlockPos destination = helper.absolutePos(new BlockPos(4, 2, 2));
+        helper.setBlock(obstacle, Blocks.BEDROCK);
+        helper.assertTrue(
+                HordeBlockBreaking.start(helper.getLevel(), zombie, destination, null).digging() == null,
+                "unbreakable blocks should stay intact");
+
+        helper.setBlock(obstacle, Blocks.DIRT);
+        HordeBlockBreaking.StartResult denied;
+        helper.getLevel().getGameRules().getRule(GameRules.RULE_MOBGRIEFING).set(false, helper.getLevel().getServer());
+        try {
+            denied = HordeBlockBreaking.start(helper.getLevel(), zombie, destination, null);
+        } finally {
+            helper.getLevel().getGameRules().getRule(GameRules.RULE_MOBGRIEFING).set(true, helper.getLevel().getServer());
+        }
+        helper.assertTrue(denied.deniedPos() != null, "mobGriefing should deny digging");
+
+        HordeBlockBreaking.StartResult start = HordeBlockBreaking.start(helper.getLevel(), zombie, destination, null);
+        helper.assertTrue(start.digging() != null, "adjacent dirt should start a digging point");
+        ServerPlayer player = HordeBlockBreakingAccess.player(helper.getLevel());
+        helper.assertTrue(
+                HordeBlockBreakingAccess.PROFILE.equals(player.getGameProfile()),
+                "digging should use the mod GameProfile");
+        helper.assertTrue(player.gameMode.isSurvival(), "digging should use survival mode");
+        helper.assertTrue(player.getMainHandItem().isEmpty(), "digging should use an empty hand");
+
+        helper.onEachTick(() -> HordeBlockBreaking.tick(helper.getLevel(), zombie, start.digging()));
+        helper.succeedWhen(() -> {
+            helper.assertBlockPresent(Blocks.AIR, obstacle);
+            helper.assertTrue(
+                    helper.getEntities(EntityType.ITEM).stream()
+                            .anyMatch(item -> item.getItem().is(Items.DIRT)),
+                    "dirt should use player drop semantics");
+        });
+    }
+
+    public static void hordeTicketMakesChunkEntityTick(GameTestHelper helper) {
+        ChunkPos origin = new ChunkPos(helper.absolutePos(BlockPos.ZERO));
+        ChunkPos distant = new ChunkPos(origin.x + 12, origin.z);
+        helper.onEachTick(() -> HordeChunkTicketAccess.acquireOrRenew(helper.getLevel(), distant));
+        helper.succeedWhen(() -> {
+            helper.assertTrue(
+                    helper.getLevel().isPositionEntityTicking(distant.getMiddleBlockPosition(0)),
+                    "horde ticket should make the chunk entity tick");
+            HordeChunkTicketAccess.release(helper.getLevel(), distant);
+        });
+    }
+
+    public static void hordeMemberIgnoresVanillaDistanceDespawn(GameTestHelper helper) {
+        Zombie zombie = spawnHordeMember(helper, new BlockPos(2, 2, 2));
+        helper.assertFalse(
+                zombie.removeWhenFarAway((double) 200 * 200),
+                "horde members should use the common 160-block cleanup instead of vanilla despawn");
+        helper.succeed();
+    }
 
     private static Zombie spawnHordeMember(GameTestHelper helper, BlockPos relativeFeet) {
         helper.getLevel().getServer().setDifficulty(Difficulty.NORMAL, true);

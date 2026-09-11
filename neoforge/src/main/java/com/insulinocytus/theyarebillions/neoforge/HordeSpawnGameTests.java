@@ -57,6 +57,21 @@ public final class HordeSpawnGameTests {
         HordeGameTests.ordinaryZombieNaturalPopulationStaysTakenOver(helper);
     }
 
+    @GameTest(template = "empty", timeoutTicks = 400)
+    public static void hordeTicketMakesChunkEntityTick(GameTestHelper helper) {
+        HordeGameTests.hordeTicketMakesChunkEntityTick(helper);
+    }
+
+    @GameTest(template = "empty")
+    public static void hordeMemberIgnoresVanillaDistanceDespawn(GameTestHelper helper) {
+        HordeGameTests.hordeMemberIgnoresVanillaDistanceDespawn(helper);
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 40)
+    public static void hordeDiggingUsesEmptySurvivalFakePlayerDrops(GameTestHelper helper) {
+        HordeGameTests.hordeDiggingUsesEmptySurvivalFakePlayerDrops(helper);
+    }
+
     @GameTest(template = "empty", timeoutTicks = 200)
     public static void nearbyMeleeAttackStillHits(GameTestHelper helper) {
         HordeGameTests.nearbyMeleeAttackStillHits(helper);

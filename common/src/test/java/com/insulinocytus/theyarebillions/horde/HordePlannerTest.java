@@ -538,6 +538,69 @@ class HordePlannerTest {
         assertNotEquals(1.5, nextNight.groups().getFirst().sector().directionRadians());
     }
 
+    @Test
+    void ticketPlanOnlyCountsTaggedMembersWithin160Blocks() {
+        HordePlanner.TicketPlan plan = HordePlanner.planTickets(new HordePlanner.TicketSnapshot(
+                List.of(player("p", 0, 0)),
+                List.of(
+                        member("tagged", 16, 0, true, false),
+                        member("vanilla", 16, 0, false, false),
+                        member("far", 161, 0, true, false)),
+                Map.of()));
+
+        assertEquals(Map.of(new HordePlanner.ChunkRef(1, 0), 1), plan.desiredCounts());
+        assertEquals(List.of(new HordePlanner.ChunkRef(1, 0)), plan.acquireOrRenew());
+        assertEquals(List.of("far"), plan.removeMemberIds());
+    }
+
+    @Test
+    void ticketPlanAcquiresDestinationBeforeReleasingEmptySource() {
+        HordePlanner.TicketPlan plan = HordePlanner.planTickets(new HordePlanner.TicketSnapshot(
+                List.of(player("p", 16, 0)),
+                List.of(member("moving", 16, 0, true, false)),
+                Map.of(new HordePlanner.ChunkRef(0, 0), 1)));
+
+        assertEquals(List.of(new HordePlanner.ChunkRef(1, 0)), plan.acquireOrRenew());
+        assertEquals(List.of(new HordePlanner.ChunkRef(0, 0)), plan.release());
+    }
+
+    @Test
+    void ticketPlanSharesOneReferenceCountedTicketPerChunk() {
+        HordePlanner.TicketPlan plan = HordePlanner.planTickets(new HordePlanner.TicketSnapshot(
+                List.of(player("p", 0, 0)),
+                List.of(
+                        member("first", 1, 1, true, false),
+                        member("second", 15, 15, true, false)),
+                Map.of()));
+
+        assertEquals(Map.of(new HordePlanner.ChunkRef(0, 0), 2), plan.desiredCounts());
+        assertEquals(List.of(new HordePlanner.ChunkRef(0, 0)), plan.acquireOrRenew());
+    }
+
+    @Test
+    void ticketPlanStopsRenewingAndCleansOrdinaryMembersWithoutPlayers() {
+        HordePlanner.TicketPlan plan = HordePlanner.planTickets(new HordePlanner.TicketSnapshot(
+                List.of(),
+                List.of(
+                        member("ordinary", 1, 1, true, false),
+                        member("persistent", 2, 2, true, true)),
+                Map.of(new HordePlanner.ChunkRef(0, 0), 2)));
+
+        assertTrue(plan.acquireOrRenew().isEmpty());
+        assertEquals(List.of(new HordePlanner.ChunkRef(0, 0)), plan.release());
+        assertEquals(List.of("ordinary"), plan.removeMemberIds());
+    }
+
+    @Test
+    void ticketPlanReassignsMembersToNearestCurrentPlayerGroup() {
+        HordePlanner.TicketPlan plan = HordePlanner.planTickets(new HordePlanner.TicketSnapshot(
+                List.of(player("a", 0, 0), player("b", 100, 0), player("c", 1000, 0)),
+                List.of(member("member", 900, 0, true, false)),
+                Map.of()));
+
+        assertEquals(HordePlanner.GroupIdentity.of("c"), plan.groupAssignments().get("member"));
+    }
+
     private static HordePlanner.Plan plan(long dayTime, int target, int ordinaryZombies) {
         String id = "p";
         return HordePlanner.plan(
@@ -579,6 +642,11 @@ class HordePlannerTest {
     private static HordePlanner.PlayerRef player(String id, double x, double y, double z) {
         return new HordePlanner.PlayerRef(id, x, y, z);
     }
+    private static HordePlanner.MemberRef member(
+            String id, double x, double z, boolean tagged, boolean persistent) {
+        return new HordePlanner.MemberRef(id, x, 0.0, z, tagged, persistent);
+    }
+
 
     private static HordePlanner.NightState seeded(String key, double direction) {
         return new HordePlanner.NightState(18000, Map.of(HordePlanner.GroupIdentity.of(key), direction));
