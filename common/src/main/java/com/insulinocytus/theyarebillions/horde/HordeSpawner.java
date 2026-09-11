@@ -63,6 +63,7 @@ public final class HordeSpawner {
         if (!level.addFreshEntity(zombie)) {
             return false;
         }
+        HordeChunkTickets.onSpawn(level, zombie);
         return true;
     }
 
@@ -70,6 +71,8 @@ public final class HordeSpawner {
         if (level.dimension() != Level.OVERWORLD) {
             return;
         }
+        List<HordePlanner.PlayerRef> players = validPlayers(level);
+        boolean ticketsReady = HordeChunkTickets.tick(level, players);
         HordeNightData night = HordeNightData.get(level);
         long dayTime = level.getDayTime();
         HordePlanner.Plan plan = HordePlanner.plan(
@@ -79,10 +82,13 @@ public final class HordeSpawner {
                         dayTime,
                         HordeGameRules.target(level),
                         countOrdinaryZombies(server),
-                        validPlayers(level),
+                        players,
                         night.state()),
                 () -> level.random.nextDouble() * (Math.PI * 2.0));
         night.setState(plan.night());
+        if (!ticketsReady) {
+            return;
+        }
         if (!plan.shouldSpawn()) {
             return;
         }

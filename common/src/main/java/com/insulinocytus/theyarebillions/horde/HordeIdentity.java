@@ -68,6 +68,16 @@ public final class HordeIdentity {
                 .toList();
         return members.isEmpty() ? null : new HordePlanner.GroupIdentity(members);
     }
+    public static void assignGroup(Entity entity, HordePlanner.GroupIdentity group) {
+        entity.getTags().stream()
+                .filter(tag -> tag.startsWith(GROUP_TAG_PREFIX))
+                .toList()
+                .forEach(entity::removeTag);
+        for (String memberId : group.memberIds()) {
+            entity.addTag(GROUP_TAG_PREFIX + memberId);
+        }
+    }
+
 
     public static boolean hasPersistentGroup(Entity entity, HordePlanner.GroupIdentity group) {
         CompoundTag nbt = new CompoundTag();
