@@ -12,13 +12,17 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.SpawnPlacements;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.monster.ZombieVillager;
+import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.level.GameRules;
-import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.phys.Vec3;
 
 public final class HordeGameTests {
     public static final String EMPTY_TEMPLATE = "theyarebillions:empty";
@@ -139,6 +143,67 @@ public final class HordeGameTests {
                 "ordinary zombie chunk generation is taken over");
         helper.succeed();
     }
+
+    public static void nearbyMeleeAttackStillHits(GameTestHelper helper) {
+        helper.setNight();
+        Zombie zombie = spawnHordeMember(helper, new BlockPos(2, 2, 2));
+        nearbyPlayer(helper, zombie.getX() + 2.0, zombie.getY(), zombie.getZ());
+        zombie.getAttribute(Attributes.FOLLOW_RANGE).setBaseValue(1.5);
+        Villager villager = helper.spawn(EntityType.VILLAGER, helper.relativeVec(zombie.position()).add(1.0, 0.0, 0.0));
+        villager.setNoAi(true);
+        float health = villager.getHealth();
+
+        helper.succeedWhen(() -> {
+            zombie.setTarget(villager);
+            helper.assertTrue(villager.getHealth() < health, "horde member near a player should retain vanilla melee hits");
+        });
+    }
+
+    public static void hordeMemberPassesOneBlockDoorway(GameTestHelper helper) {
+        for (int z = 0; z <= 5; z++) {
+            for (int x = 0; x <= 4; x++) {
+                helper.setBlock(new BlockPos(x, 1, z), Blocks.GRASS_BLOCK);
+            }
+            for (int y = 2; y <= 3; y++) {
+                helper.setBlock(new BlockPos(1, y, z), Blocks.STONE);
+                helper.setBlock(new BlockPos(3, y, z), Blocks.STONE);
+            }
+        }
+        for (int y = 2; y <= 3; y++) {
+            helper.setBlock(new BlockPos(0, y, 3), Blocks.STONE);
+            helper.setBlock(new BlockPos(4, y, 3), Blocks.STONE);
+        }
+        Zombie zombie = spawnHordeMember(helper, new BlockPos(2, 2, 1));
+        nearbyPlayer(helper, zombie.getX(), zombie.getY(), zombie.getZ() + 3.0);
+        Villager villager = helper.spawn(EntityType.VILLAGER, new Vec3(2.5, 2.0, 4.5));
+        villager.setNoAi(true);
+        zombie.setTarget(villager);
+        double destinationZ = villager.getZ();
+
+        helper.succeedWhen(() -> helper.assertTrue(
+                zombie.getZ() > destinationZ - 1.0,
+                "horde member should pass through the one-block doorway"));
+    }
+
+    public static void nearbyPlayerStillGetsPushed(GameTestHelper helper) {
+        Zombie zombie = spawnHordeMember(helper, new BlockPos(2, 2, 2));
+        ServerPlayer player = nearbyPlayer(helper, zombie.getX() + 0.1, zombie.getY(), zombie.getZ());
+        zombie.setNoAi(true);
+        player.setDeltaMovement(Vec3.ZERO);
+
+        helper.runAfterDelay(1, () -> {
+            helper.assertTrue(player.getDeltaMovement().horizontalDistanceSqr() > 0.0, "nearby player should receive push impulse");
+            helper.succeed();
+        });
+    }
+
+    private static ServerPlayer nearbyPlayer(GameTestHelper helper, double x, double y, double z) {
+        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        player.gameMode.changeGameModeForPlayer(GameType.SURVIVAL);
+        player.setPos(x, y, z);
+        return player;
+    }
+
     public static void hordeDiggingUsesEmptySurvivalFakePlayerDrops(GameTestHelper helper) {
         Zombie zombie = spawnHordeMember(helper, new BlockPos(2, 2, 2));
         zombie.setCanBreakDoors(true);

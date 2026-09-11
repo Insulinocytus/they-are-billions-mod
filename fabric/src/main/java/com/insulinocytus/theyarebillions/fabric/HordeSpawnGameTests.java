@@ -40,6 +40,21 @@ public final class HordeSpawnGameTests {
         HordeGameTests.ordinaryZombieNaturalPopulationStaysTakenOver(helper);
     }
 
+    @GameTest(template = HordeGameTests.EMPTY_TEMPLATE, timeoutTicks = 200)
+    public void nearbyMeleeAttackStillHits(GameTestHelper helper) {
+        HordeGameTests.nearbyMeleeAttackStillHits(helper);
+    }
+
+    @GameTest(template = HordeGameTests.EMPTY_TEMPLATE, timeoutTicks = 200)
+    public void hordeMemberPassesOneBlockDoorway(GameTestHelper helper) {
+        HordeGameTests.hordeMemberPassesOneBlockDoorway(helper);
+    }
+
+    @GameTest(template = HordeGameTests.EMPTY_TEMPLATE, timeoutTicks = 200)
+    public void nearbyPlayerStillGetsPushed(GameTestHelper helper) {
+        HordeGameTests.nearbyPlayerStillGetsPushed(helper);
+    }
+
     @GameTest(template = HordeGameTests.EMPTY_TEMPLATE, timeoutTicks = 400)
     public void hordeTicketMakesChunkEntityTick(GameTestHelper helper) {
         HordeGameTests.hordeTicketMakesChunkEntityTick(helper);
@@ -54,5 +69,4 @@ public final class HordeSpawnGameTests {
     public void hordeDiggingUsesEmptySurvivalFakePlayerDrops(GameTestHelper helper) {
         HordeGameTests.hordeDiggingUsesEmptySurvivalFakePlayerDrops(helper);
     }
-
 }
