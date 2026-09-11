@@ -30,40 +30,32 @@ public final class HordeChunkTickets {
             HordePlanner.TicketPlan plan = HordePlanner.planTickets(
                     new HordePlanner.TicketSnapshot(players, memberRefs(members), state.activeCounts));
             removeMembers(members, plan.removeMemberIds(), OFFLINE_CLEANUP_LIMIT);
-            plan.release().forEach(chunk -> release(level, chunk));
             state.reset();
             recountLoadedOccupancy(level, data, loadedMembers(level));
             return false;
         }
 
-        if (!state.hadPlayers) {
-            state.hadPlayers = true;
-            state.recovering = true;
-            data.occupancy().entrySet().stream()
-                    .filter(entry -> chunkWithinRange(entry.getKey(), players))
-                    .sorted(Map.Entry.comparingByKey())
-                    .forEach(entry -> {
-                        acquireOrRenew(level, entry.getKey());
-                        state.activeCounts.put(entry.getKey(), entry.getValue());
-                        state.pendingRecovery.add(entry.getKey());
-                    });
+        data.occupancy().entrySet().stream()
+                .filter(entry -> chunkWithinRange(entry.getKey(), players))
+                .filter(entry -> !state.activeCounts.containsKey(entry.getKey()))
+                .sorted(Map.Entry.comparingByKey())
+                .forEach(entry -> {
+                    acquireOrRenew(level, entry.getKey());
+                    state.activeCounts.put(entry.getKey(), entry.getValue());
+                    state.pendingRecovery.add(entry.getKey());
+                });
+        state.activeCounts.keySet().forEach(chunk -> acquireOrRenew(level, chunk));
+        state.pendingRecovery.removeIf(chunk -> isEntityTicking(level, chunk));
+        if (!state.pendingRecovery.isEmpty()) {
+            return false;
         }
-
-        if (state.recovering) {
-            state.activeCounts.keySet().forEach(chunk -> acquireOrRenew(level, chunk));
-            state.pendingRecovery.removeIf(chunk -> isEntityTicking(level, chunk));
-            if (!state.pendingRecovery.isEmpty()) {
-                return false;
-            }
-            state.recovering = false;
-            members = loadedMembers(level);
-        }
+        members = loadedMembers(level);
 
         HordePlanner.TicketPlan plan = HordePlanner.planTickets(
                 new HordePlanner.TicketSnapshot(players, memberRefs(members), state.activeCounts));
         plan.acquireOrRenew().forEach(chunk -> acquireOrRenew(level, chunk));
         assignGroups(members, plan.groupAssignments());
-        removeMembers(members, plan.removeMemberIds(), Integer.MAX_VALUE);
+        removeMembers(members, plan.removeMemberIds(), OFFLINE_CLEANUP_LIMIT);
         plan.release().forEach(chunk -> release(level, chunk));
 
         state.activeCounts.clear();
@@ -72,24 +64,47 @@ public final class HordeChunkTickets {
         return true;
     }
 
+    static boolean beforeSpawn(ServerLevel level, Zombie zombie) {
+        if (!HordeIdentity.isHordeMember(zombie) || !withinRange(level, zombie.getX(), zombie.getY(), zombie.getZ())) {
+            return false;
+        }
+        HordePlanner.ChunkRef chunk = chunk(zombie);
+        State state = STATES.computeIfAbsent(level, ignored -> new State());
+        boolean newlyAcquired = !state.activeCounts.containsKey(chunk);
+        acquireOrRenew(level, chunk);
+        return newlyAcquired;
+    }
+
+    static void cancelSpawn(ServerLevel level, Zombie zombie, boolean newlyAcquired) {
+        if (newlyAcquired) {
+            release(level, chunk(zombie));
+        }
+    }
+
     static void onSpawn(ServerLevel level, Zombie zombie) {
         if (!HordeIdentity.isHordeMember(zombie)) {
             return;
         }
         State state = STATES.computeIfAbsent(level, ignored -> new State());
-        List<HordePlanner.PlayerRef> players = HordeSpawner.validPlayers(level);
-        HordePlanner.TicketPlan plan = HordePlanner.planTickets(new HordePlanner.TicketSnapshot(
-                players, memberRefs(List.of(zombie)), state.activeCounts));
         HordePlanner.ChunkRef chunk = chunk(zombie);
-        if (!plan.desiredCounts().containsKey(chunk)) {
-            return;
-        }
-        acquireOrRenew(level, chunk);
         state.activeCounts.merge(chunk, 1, Integer::sum);
         HordeChunkData data = HordeChunkData.get(level);
         Map<HordePlanner.ChunkRef, Integer> occupancy = new HashMap<>(data.occupancy());
         occupancy.merge(chunk, 1, Integer::sum);
         data.setOccupancy(occupancy);
+    }
+
+    public static void beforePositionChange(Entity entity, double x, double y, double z) {
+        if (!(entity instanceof Zombie zombie)
+                || !(entity.level() instanceof ServerLevel level)
+                || !HordeIdentity.isHordeMember(zombie)) {
+            return;
+        }
+        HordePlanner.ChunkRef current = chunk(zombie);
+        HordePlanner.ChunkRef target = new HordePlanner.MemberRef("", x, y, z, true, false).chunk();
+        if (!target.equals(current) && withinRange(level, x, y, z)) {
+            acquireOrRenew(level, target);
+        }
     }
     public static void onLevelUnload(ServerLevel level) {
         State state = STATES.remove(level);
@@ -187,6 +202,14 @@ public final class HordeChunkTickets {
                 && level.isPositionEntityTicking(center);
     }
 
+    private static boolean withinRange(ServerLevel level, double x, double y, double z) {
+        HordePlanner.MemberRef member = new HordePlanner.MemberRef("", x, y, z, true, false);
+        return !HordePlanner.planTickets(new HordePlanner.TicketSnapshot(
+                        HordeSpawner.validPlayers(level), List.of(member), Map.of()))
+                .desiredCounts()
+                .isEmpty();
+    }
+
     private static HordePlanner.ChunkRef chunk(Zombie zombie) {
         ChunkPos chunk = zombie.chunkPosition();
         return new HordePlanner.ChunkRef(chunk.x, chunk.z);
@@ -203,14 +226,11 @@ public final class HordeChunkTickets {
     private static final class State {
         private final Map<HordePlanner.ChunkRef, Integer> activeCounts = new HashMap<>();
         private final Set<HordePlanner.ChunkRef> pendingRecovery = new HashSet<>();
-        private boolean recovering;
-        private boolean hadPlayers;
 
         private void reset() {
             activeCounts.clear();
             pendingRecovery.clear();
-            recovering = false;
-            hadPlayers = false;
         }
+
     }
 }

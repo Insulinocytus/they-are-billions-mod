@@ -8,7 +8,7 @@ import net.minecraft.world.level.ChunkPos;
 public final class HordeChunkTicketAccessImpl {
     private static final int ENTITY_TICKING_DISTANCE = 2;
     private static final TicketType<ChunkPos> HORDE =
-            TicketType.create("theyarebillions:horde", Comparator.comparingLong(ChunkPos::toLong), 40);
+            TicketType.create("theyarebillions:horde", Comparator.comparingLong(ChunkPos::toLong), 120);
 
     private HordeChunkTicketAccessImpl() {
     }

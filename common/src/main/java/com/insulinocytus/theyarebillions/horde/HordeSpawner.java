@@ -60,7 +60,9 @@ public final class HordeSpawner {
             return false;
         }
         HordeIdentity.enforceHordeTraits(zombie);
+        boolean newlyAcquiredTicket = HordeChunkTickets.beforeSpawn(level, zombie);
         if (!level.addFreshEntity(zombie)) {
+            HordeChunkTickets.cancelSpawn(level, zombie, newlyAcquiredTicket);
             return false;
         }
         HordeChunkTickets.onSpawn(level, zombie);

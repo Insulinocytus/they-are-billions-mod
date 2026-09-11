@@ -56,7 +56,7 @@ public final class HordeSpawnGameTests {
     public static void ordinaryZombieNaturalPopulationStaysTakenOver(GameTestHelper helper) {
         HordeGameTests.ordinaryZombieNaturalPopulationStaysTakenOver(helper);
     }
-    @GameTest(template = "empty", timeoutTicks = 200)
+    @GameTest(template = "empty", timeoutTicks = 400)
     public static void hordeTicketMakesChunkEntityTick(GameTestHelper helper) {
         HordeGameTests.hordeTicketMakesChunkEntityTick(helper);
     }

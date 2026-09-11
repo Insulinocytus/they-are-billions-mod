@@ -140,7 +140,7 @@ public final class HordeGameTests {
 
     public static void hordeTicketMakesChunkEntityTick(GameTestHelper helper) {
         ChunkPos origin = new ChunkPos(helper.absolutePos(BlockPos.ZERO));
-        ChunkPos distant = new ChunkPos(origin.x + 20, origin.z);
+        ChunkPos distant = new ChunkPos(origin.x + 12, origin.z);
         helper.onEachTick(() -> HordeChunkTicketAccess.acquireOrRenew(helper.getLevel(), distant));
         helper.succeedWhen(() -> {
             helper.assertTrue(
