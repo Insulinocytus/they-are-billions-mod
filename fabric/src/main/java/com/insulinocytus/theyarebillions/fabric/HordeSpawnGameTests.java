@@ -39,6 +39,7 @@ public final class HordeSpawnGameTests {
     public void ordinaryZombieNaturalPopulationStaysTakenOver(GameTestHelper helper) {
         HordeGameTests.ordinaryZombieNaturalPopulationStaysTakenOver(helper);
     }
+
     @GameTest(template = HordeGameTests.EMPTY_TEMPLATE, timeoutTicks = 400)
     public void hordeTicketMakesChunkEntityTick(GameTestHelper helper) {
         HordeGameTests.hordeTicketMakesChunkEntityTick(helper);
@@ -47,6 +48,11 @@ public final class HordeSpawnGameTests {
     @GameTest(template = HordeGameTests.EMPTY_TEMPLATE)
     public void hordeMemberIgnoresVanillaDistanceDespawn(GameTestHelper helper) {
         HordeGameTests.hordeMemberIgnoresVanillaDistanceDespawn(helper);
+    }
+
+    @GameTest(template = HordeGameTests.EMPTY_TEMPLATE, timeoutTicks = 40)
+    public void hordeDiggingUsesEmptySurvivalFakePlayerDrops(GameTestHelper helper) {
+        HordeGameTests.hordeDiggingUsesEmptySurvivalFakePlayerDrops(helper);
     }
 
 }

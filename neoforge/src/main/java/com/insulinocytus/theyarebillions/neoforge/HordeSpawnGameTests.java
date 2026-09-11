@@ -67,6 +67,11 @@ public final class HordeSpawnGameTests {
     }
 
 
+    @GameTest(template = "empty", timeoutTicks = 40)
+    public static void hordeDiggingUsesEmptySurvivalFakePlayerDrops(GameTestHelper helper) {
+        HordeGameTests.hordeDiggingUsesEmptySurvivalFakePlayerDrops(helper);
+    }
+
     @GameTest(template = "empty")
     public static void namingDuringFinalizeKeepsVanillaTraits(GameTestHelper helper) {
         helper.getLevel().getServer().setDifficulty(Difficulty.NORMAL, true);
