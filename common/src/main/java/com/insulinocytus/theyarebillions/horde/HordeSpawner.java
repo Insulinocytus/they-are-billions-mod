@@ -74,7 +74,7 @@ public final class HordeSpawner {
             return;
         }
         List<HordePlanner.PlayerRef> players = validPlayers(level);
-        boolean ticketsReady = HordeChunkTickets.tick(level, players);
+        HordeChunkTickets.TickResult tickets = HordeChunkTickets.tick(level, players);
         HordeNightData night = HordeNightData.get(level);
         long dayTime = level.getDayTime();
         HordePlanner.Plan plan = HordePlanner.plan(
@@ -88,7 +88,9 @@ public final class HordeSpawner {
                         night.state()),
                 () -> level.random.nextDouble() * (Math.PI * 2.0));
         night.setState(plan.night());
-        if (!ticketsReady) {
+        HordeDaytimeCleanup.tick(
+                level, players, HordeDaytimeCleanup.REMOVALS_PER_TICK - tickets.removed());
+        if (!tickets.ready()) {
             return;
         }
         if (!plan.shouldSpawn()) {
