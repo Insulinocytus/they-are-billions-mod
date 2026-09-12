@@ -140,9 +140,11 @@ public final class HordeNavigation {
                     && zombie.getNavigation().isDone()
                     && acquirePathfinding(cache, zombie, follower, tick)) {
                 Path path = zombie.getNavigation().createPath(target.blockPosition(), 0);
-                if ((path == null || !path.canReach())
-                        && tryStartDigging(zombie, target.blockPosition(), follower, target)) {
-                    return true;
+                if (path == null || !path.canReach()) {
+                    if (tryStartDigging(zombie, target.blockPosition(), follower, target)) {
+                        return true;
+                    }
+                    logPathFailure(zombie, target.blockPosition());
                 }
             }
             return false;
@@ -162,9 +164,11 @@ public final class HordeNavigation {
             follower.useVanilla(zombie);
             if (acquirePathfinding(cache, zombie, follower, tick)) {
                 Path path = zombie.getNavigation().createPath(target, 0);
-                if ((path == null || !path.canReach())
-                        && tryStartDigging(zombie, target.blockPosition(), follower, target)) {
-                    return true;
+                if (path == null || !path.canReach()) {
+                    if (tryStartDigging(zombie, target.blockPosition(), follower, target)) {
+                        return true;
+                    }
+                    logPathFailure(zombie, target.blockPosition());
                 }
                 if (path != null) {
                     zombie.getNavigation().moveTo(path, SPEED);
@@ -286,6 +290,7 @@ public final class HordeNavigation {
             if (path == null || !zombie.getNavigation().moveTo(path, SPEED)) {
                 follower.vanillaFallback = false;
                 follower.fallbackPathStarted = false;
+                logPathFailure(zombie, target.blockPosition());
                 return false;
             }
             follower.fallbackPathStarted = true;
@@ -745,6 +750,7 @@ public final class HordeNavigation {
             }
             Path path = zombie.getNavigation().createPath(target, 0);
             if (path == null || path.getNodeCount() == 0) {
+                logPathFailure(zombie, target);
                 return new RouteResult(null, true);
             }
             List<Waypoint> waypoints = java.util.stream.IntStream.range(0, path.getNodeCount())
@@ -752,6 +758,7 @@ public final class HordeNavigation {
                     .map(Waypoint::of)
                     .toList();
             if (!makesForwardProgress(position, targetPoint, waypoints.getLast())) {
+                logPathFailure(zombie, target);
                 return new RouteResult(null, true);
             }
             RouteTemplate template = new RouteTemplate(
