@@ -107,8 +107,9 @@ final class HordeBlockBreaking {
             return TickResult.COMPLETE;
         }
         SiteRuntime runtime = levelDigging.runtimes.get(digging.pos);
+        long tick = level.getServer().getTickCount();
         if (runtime == null) {
-            COORDINATOR.release(key(level, digging.pos), zombie.getId());
+            COORDINATOR.release(key(level, digging.pos), zombie.getId(), tick);
             return TickResult.COMPLETE;
         }
         if (!level.getBlockState(digging.pos).equals(runtime.state)) {
@@ -118,10 +119,9 @@ final class HordeBlockBreaking {
             return TickResult.COMPLETE;
         }
         if (!isAdjacent(zombie, digging.pos)) {
-            COORDINATOR.release(key(level, digging.pos), zombie.getId());
+            COORDINATOR.release(key(level, digging.pos), zombie.getId(), tick);
             return TickResult.COMPLETE;
         }
-        long tick = level.getServer().getTickCount();
         if (!level.getGameRules().getBoolean(GameRules.RULE_MOBGRIEFING)) {
             COORDINATOR.deny(key(level, digging.pos), tick);
             return TickResult.DENIED;
@@ -185,7 +185,7 @@ final class HordeBlockBreaking {
     static void stop(ServerLevel level, Zombie zombie, Digging digging) {
         LevelDigging levelDigging = LEVELS.get(level);
         if (levelDigging != null) {
-            COORDINATOR.release(key(level, digging.pos), zombie.getId());
+            COORDINATOR.release(key(level, digging.pos), zombie.getId(), level.getServer().getTickCount());
         }
     }
 

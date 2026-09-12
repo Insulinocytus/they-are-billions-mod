@@ -106,11 +106,49 @@ class HordeDiggingCoordinatorTest {
 
         assertTrue(coordinator.request("wall", 1, 9.0, 0.1F, 0));
         coordinator.tick(0);
-        coordinator.tick(39);
+        coordinator.tick(1);
+        coordinator.release("wall", 1, 1);
+        coordinator.tick(40);
 
         assertEquals(0.1F, coordinator.progress("wall"), 0.0001F);
 
-        coordinator.tick(40);
+        coordinator.tick(41);
+
+        assertEquals(0.0F, coordinator.progress("wall"), 0.0001F);
+    }
+
+    @Test
+    void doesNotStartGraceUntilTheLastParticipantLeaves() {
+        HordeDiggingCoordinator<String> coordinator = new HordeDiggingCoordinator<>();
+
+        assertTrue(coordinator.request("wall", 1, 9.0, 0.1F, 0));
+        assertTrue(coordinator.request("wall", 2, 9.0, 0.1F, 0));
+        coordinator.tick(0);
+        coordinator.release("wall", 1, 1);
+        coordinator.release("wall", 2, 20);
+        coordinator.tick(59);
+
+        assertEquals(0.2F, coordinator.progress("wall"), 0.0001F);
+
+        coordinator.tick(60);
+
+        assertEquals(0.0F, coordinator.progress("wall"), 0.0001F);
+    }
+
+    @Test
+    void rejoiningDuringGraceRestartsTheTimer() {
+        HordeDiggingCoordinator<String> coordinator = new HordeDiggingCoordinator<>();
+
+        assertTrue(coordinator.request("wall", 1, 9.0, 0.1F, 0));
+        coordinator.tick(0);
+        coordinator.release("wall", 1, 1);
+        assertTrue(coordinator.request("wall", 1, 9.0, 0.1F, 20));
+        coordinator.release("wall", 1, 21);
+        coordinator.tick(60);
+
+        assertEquals(0.2F, coordinator.progress("wall"), 0.0001F);
+
+        coordinator.tick(61);
 
         assertEquals(0.0F, coordinator.progress("wall"), 0.0001F);
     }

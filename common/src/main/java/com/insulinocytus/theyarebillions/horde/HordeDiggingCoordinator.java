@@ -44,17 +44,21 @@ final class HordeDiggingCoordinator<K> {
         participant.progressPerTick = progressPerTick;
         if (existing.active && participant.lastHeartbeat != tick) {
             existing.progress = Math.min(1.0F, existing.progress + progressPerTick);
-            existing.lastActivityTick = tick;
         }
         participant.lastHeartbeat = tick;
         existing.playerDistance = playerDistance;
+        existing.emptySinceTick = Long.MIN_VALUE;
         return true;
     }
 
-    void release(K site, int participantId) {
+    void release(K site, int participantId, long tick) {
         Site existing = sites.get(site);
-        if (existing != null) {
-            existing.participants.remove(participantId);
+        if (existing == null) {
+            return;
+        }
+        existing.participants.remove(participantId);
+        if (existing.participants.isEmpty() && existing.emptySinceTick == Long.MIN_VALUE) {
+            existing.emptySinceTick = tick;
         }
     }
 
@@ -82,9 +86,14 @@ final class HordeDiggingCoordinator<K> {
                 continue;
             }
             site.participants.values().removeIf(participant -> participant.lastHeartbeat < tick - 1);
-            if (site.participants.isEmpty() && tick - site.lastActivityTick >= EMPTY_GRACE_TICKS) {
-                iterator.remove();
-                activeCount--;
+            if (site.participants.isEmpty()) {
+                if (site.emptySinceTick == Long.MIN_VALUE) {
+                    site.emptySinceTick = tick;
+                }
+                if (tick - site.emptySinceTick >= EMPTY_GRACE_TICKS) {
+                    iterator.remove();
+                    activeCount--;
+                }
             }
         }
 
@@ -107,7 +116,6 @@ final class HordeDiggingCoordinator<K> {
             site.active = true;
             activeCount++;
             apply(site, tick);
-            site.lastActivityTick = tick;
         }
     }
 
@@ -171,7 +179,7 @@ final class HordeDiggingCoordinator<K> {
         private final Map<Integer, Participant> participants = new LinkedHashMap<>();
         private double playerDistance;
         private float progress;
-        private long lastActivityTick;
+        private long emptySinceTick = Long.MIN_VALUE;
         private long lastAppliedTick = Long.MIN_VALUE;
         private boolean active;
 
