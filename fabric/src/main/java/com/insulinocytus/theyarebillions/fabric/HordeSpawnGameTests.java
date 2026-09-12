@@ -84,4 +84,9 @@ public final class HordeSpawnGameTests {
     public void emptyPlayersReleasePlatformHordeTickets(GameTestHelper helper) {
         HordeGameTests.emptyPlayersReleasePlatformHordeTickets(helper);
     }
+
+    @GameTest(template = HordeGameTests.EMPTY_TEMPLATE)
+    public void adminStatusAndLogLevelArePrivateAndPersistent(GameTestHelper helper) {
+        HordeGameTests.adminStatusAndLogLevelArePrivateAndPersistent(helper);
+    }
 }

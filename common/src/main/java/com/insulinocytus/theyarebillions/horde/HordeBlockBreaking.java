@@ -1,5 +1,6 @@
 package com.insulinocytus.theyarebillions.horde;
 
+import com.insulinocytus.theyarebillions.TheyAreBillions;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
@@ -42,6 +43,10 @@ final class HordeBlockBreaking {
         COORDINATOR.setLimit(limit);
     }
 
+    static int activeSiteCount() {
+        return COORDINATOR.activeCount();
+    }
+
     static void onServerTick(MinecraftServer server) {
         COORDINATOR.tick(server.getTickCount());
         for (Map.Entry<ServerLevel, LevelDigging> entry : LEVELS.entrySet()) {
@@ -67,11 +72,13 @@ final class HordeBlockBreaking {
         }
 
         if (!level.getGameRules().getBoolean(GameRules.RULE_MOBGRIEFING)) {
+            logDiggingFailure(candidate.pos(), "mobGriefing");
             return new StartResult(null, candidate.pos());
         }
         ServerPlayer player = prepareActionPlayer(level, zombie);
         if (!canBreak(level, player, candidate.pos())) {
             COORDINATOR.deny(key(level, candidate.pos()), tick);
+            logDiggingFailure(candidate.pos(), "permission");
             return new StartResult(null, candidate.pos());
         }
 
@@ -79,6 +86,7 @@ final class HordeBlockBreaking {
         player = prepareSpeedPlayer(level, zombie);
         float progressPerTick = state.getDestroyProgress(player, level, candidate.pos());
         if (!(progressPerTick > 0.0F)) {
+            logDiggingFailure(candidate.pos(), "unbreakable");
             return StartResult.NONE;
         }
         progressPerTick = Math.min(1.0F, progressPerTick);
@@ -124,6 +132,7 @@ final class HordeBlockBreaking {
         }
         if (!level.getGameRules().getBoolean(GameRules.RULE_MOBGRIEFING)) {
             COORDINATOR.deny(key(level, digging.pos), tick);
+            logDiggingFailure(digging.pos, "mobGriefing");
             return TickResult.DENIED;
         }
         if (!COORDINATOR.request(
@@ -141,6 +150,7 @@ final class HordeBlockBreaking {
             ServerPlayer player = prepareActionPlayer(level, zombie);
             if (!HordeBlockBreakingAccess.start(level, zombie, player, digging.pos, runtime.face)) {
                 COORDINATOR.deny(key(level, digging.pos), tick);
+                logDiggingFailure(digging.pos, "start");
                 return TickResult.DENIED;
             }
             runtime.started = true;
@@ -173,6 +183,7 @@ final class HordeBlockBreaking {
                 || !HordeBlockBreakingAccess.destroy(level, zombie, digging.pos)
                 || level.getBlockState(digging.pos).equals(runtime.state)) {
             COORDINATOR.deny(key(level, digging.pos), tick);
+            logDiggingFailure(digging.pos, "destroy");
             return TickResult.DENIED;
         }
         level.levelEvent(2001, digging.pos, Block.getId(runtime.state));
@@ -316,6 +327,12 @@ final class HordeBlockBreaking {
                 && Math.abs(pos.getZ() - feet.getZ()) <= 1
                 && pos.getY() >= feet.getY()
                 && pos.getY() <= feet.getY() + 1;
+    }
+
+    private static void logDiggingFailure(BlockPos pos, String reason) {
+        if (HordeAdmin.debugEnabled()) {
+            TheyAreBillions.LOGGER.debug("Horde digging failed at {} ({})", pos, reason);
+        }
     }
 
     record StartResult(Digging digging, BlockPos deniedPos) {

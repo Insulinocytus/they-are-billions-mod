@@ -87,6 +87,14 @@ public final class HordeChunkTickets {
         return state != null && state.activeCounts.containsKey(chunk);
     }
 
+    static int activeChunkCount() {
+        int total = 0;
+        for (State state : STATES.values()) {
+            total += state.activeCounts.size();
+        }
+        return total;
+    }
+
     static boolean beforeSpawn(ServerLevel level, Zombie zombie) {
         if (!HordeIdentity.isHordeMember(zombie) || !withinRange(level, zombie.getX(), zombie.getY(), zombie.getZ())) {
             return false;
