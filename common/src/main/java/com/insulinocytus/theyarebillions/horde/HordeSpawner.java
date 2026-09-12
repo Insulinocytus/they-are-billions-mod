@@ -1,6 +1,7 @@
 package com.insulinocytus.theyarebillions.horde;
 
 import com.insulinocytus.theyarebillions.HordeSpawnAccess;
+import com.insulinocytus.theyarebillions.TheyAreBillions;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.IntPredicate;
@@ -32,23 +33,23 @@ public final class HordeSpawner {
     public static boolean spawnHordeMember(
             ServerLevel level, BlockPos pos, HordePlanner.GroupIdentity group) {
         if (level.getDifficulty() == Difficulty.PEACEFUL) {
-            return false;
+            return spawnFailed(pos, "peaceful");
         }
         if (!level.getWorldBorder().isWithinBounds(pos)) {
-            return false;
+            return spawnFailed(pos, "world border");
         }
         level.getChunk(pos);
         if (!HordeSpawnAccess.checkSpawnPlacement(level, pos)) {
-            return false;
+            return spawnFailed(pos, "placement");
         }
         Zombie zombie = EntityType.ZOMBIE.create(level);
         if (zombie == null) {
-            return false;
+            return spawnFailed(pos, "create");
         }
         zombie.moveTo(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5, level.random.nextFloat() * 360.0F, 0.0F);
         if (!HordeSpawnAccess.checkSpawnPosition(zombie, level)) {
             zombie.discard();
-            return false;
+            return spawnFailed(pos, "position");
         }
         if (group == null) {
             HordeIdentity.mark(zombie);
@@ -57,13 +58,13 @@ public final class HordeSpawner {
         }
         if (!HordeSpawnAccess.finalizeHordeSpawn(zombie, level)) {
             zombie.discard();
-            return false;
+            return spawnFailed(pos, "finalize");
         }
         HordeIdentity.enforceHordeTraits(zombie);
         boolean newlyAcquiredTicket = HordeChunkTickets.beforeSpawn(level, zombie);
         if (!level.addFreshEntity(zombie)) {
             HordeChunkTickets.cancelSpawn(level, zombie, newlyAcquiredTicket);
-            return false;
+            return spawnFailed(pos, "add");
         }
         HordeChunkTickets.onSpawn(level, zombie);
         return true;
@@ -152,6 +153,9 @@ public final class HordeSpawner {
         int blockX = Mth.floor(sector.originX() + Math.cos(sector.directionRadians()) * distance);
         int blockZ = Mth.floor(sector.originZ() + Math.sin(sector.directionRadians()) * distance);
         if (!sector.containsBlockCenter(blockX, blockZ)) {
+            if (TheyAreBillions.LOGGER.isDebugEnabled()) {
+                return spawnFailed(new BlockPos(blockX, 0, blockZ), "sector");
+            }
             return false;
         }
         level.getChunk(blockX >> 4, blockZ >> 4);
@@ -179,7 +183,7 @@ public final class HordeSpawner {
                 mode == GameType.ADVENTURE);
     }
 
-    private static int countOrdinaryZombies(MinecraftServer server) {
+    static int countOrdinaryZombies(MinecraftServer server) {
         int ticking = 0;
         for (ServerLevel level : server.getAllLevels()) {
             for (Entity entity : level.getAllEntities()) {
@@ -196,5 +200,12 @@ public final class HordeSpawner {
 
     static boolean countsTowardBudget(boolean ordinaryZombie, boolean positionEntityTicking) {
         return ordinaryZombie && positionEntityTicking;
+    }
+
+    private static boolean spawnFailed(BlockPos pos, String reason) {
+        if (TheyAreBillions.LOGGER.isDebugEnabled()) {
+            TheyAreBillions.LOGGER.debug("Horde spawn failed at {} ({})", pos, reason);
+        }
+        return false;
     }
 }

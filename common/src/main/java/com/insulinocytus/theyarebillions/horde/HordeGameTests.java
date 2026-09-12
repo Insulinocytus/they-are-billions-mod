@@ -1,12 +1,20 @@
 package com.insulinocytus.theyarebillions.horde;
 
 import com.insulinocytus.theyarebillions.HordeChunkTicketAccess;
+import com.insulinocytus.theyarebillions.TheyAreBillions;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.commands.CommandSource;
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.Difficulty;
@@ -374,6 +382,53 @@ public final class HordeGameTests {
         });
     }
 
+    public static void adminStatusAndLogLevelArePrivateAndPersistent(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        CapturingSource captured = new CapturingSource();
+        CommandSourceStack admin = server.createCommandSourceStack().withPermission(2).withSource(captured);
+        CommandSourceStack denied = server.createCommandSourceStack().withPermission(1).withSource(captured);
+        server.getCommands().performPrefixedCommand(admin, TheyAreBillions.MOD_ID + " log INFO");
+        helper.assertTrue(
+                !TheyAreBillions.LOGGER.isDebugEnabled(), "admin log INFO should restore the default");
+        captured.messages.clear();
+        server.getCommands().performPrefixedCommand(denied, TheyAreBillions.MOD_ID + " status");
+        helper.assertTrue(
+                captured.messages.stream().noneMatch(message -> message.contains("hordeMembers=")),
+                "permission 1 must not receive horde status");
+        captured.messages.clear();
+        server.getCommands().performPrefixedCommand(denied, TheyAreBillions.MOD_ID + " log DEBUG");
+        helper.assertTrue(
+                !TheyAreBillions.LOGGER.isDebugEnabled(), "permission 1 must not change the log level");
+        captured.messages.clear();
+        server.getCommands().performPrefixedCommand(admin, TheyAreBillions.MOD_ID + " status");
+        helper.assertTrue(captured.messages.size() == 1, "status should return only to the executor");
+        String status = captured.messages.getFirst();
+        helper.assertTrue(status.contains("hordeMembers="), status);
+        helper.assertTrue(status.contains("ordinaryZombies="), status);
+        helper.assertTrue(status.contains("playerGroups="), status);
+        helper.assertTrue(status.contains("ticketChunks="), status);
+        helper.assertTrue(status.contains("sharedRoutes="), status);
+        helper.assertTrue(status.contains("diggingSites="), status);
+        helper.assertTrue(status.contains("performanceTier="), status);
+        helper.assertTrue(status.contains("logLevel="), status);
+        captured.messages.clear();
+        server.getCommands().performPrefixedCommand(admin, TheyAreBillions.MOD_ID + " log DEBUG");
+        helper.assertTrue(
+                TheyAreBillions.LOGGER.isDebugEnabled(), "log command should apply immediately");
+        try {
+            helper.assertTrue(
+                    "logLevel=DEBUG\n"
+                            .equals(Files.readString(HordeAdmin.configFile(server), StandardCharsets.UTF_8)),
+                    "log command should persist the instance log level");
+        } catch (IOException exception) {
+            throw new RuntimeException(exception);
+        }
+        server.getCommands().performPrefixedCommand(admin, TheyAreBillions.MOD_ID + " log INFO");
+        helper.assertTrue(
+                !TheyAreBillions.LOGGER.isDebugEnabled(), "restored INFO should disable debug");
+        helper.succeed();
+    }
+
 
     private static Zombie spawnHordeMember(GameTestHelper helper, BlockPos relativeFeet) {
         helper.getLevel().getServer().setDifficulty(Difficulty.NORMAL, true);
@@ -427,6 +482,30 @@ public final class HordeGameTests {
                 continue;
             }
             helper.assertTrue(zombie.getItemBySlot(slot).isEmpty(), slot.getName() + " should be empty");
+        }
+    }
+
+    private static final class CapturingSource implements CommandSource {
+        private final List<String> messages = new ArrayList<>();
+
+        @Override
+        public void sendSystemMessage(Component component) {
+            messages.add(component.getString());
+        }
+
+        @Override
+        public boolean acceptsSuccess() {
+            return true;
+        }
+
+        @Override
+        public boolean acceptsFailure() {
+            return true;
+        }
+
+        @Override
+        public boolean shouldInformAdmins() {
+            return false;
         }
     }
 }

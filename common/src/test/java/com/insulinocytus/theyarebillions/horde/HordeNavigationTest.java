@@ -82,6 +82,28 @@ class HordeNavigationTest {
     }
 
     @Test
+    void sharedRouteCountOmitsExpiredCachedRoutes() {
+        HordeNavigation.RouteEntry createdAtTen = new HordeNavigation.RouteEntry(
+                new HordeNavigation.RouteTemplate(
+                        List.of(new HordeNavigation.Waypoint(4, 64, 0)),
+                        new HordeNavigation.Waypoint(100, 64, 0),
+                        10,
+                        7));
+        HordeNavigation.RouteEntry createdAtTwenty = new HordeNavigation.RouteEntry(
+                new HordeNavigation.RouteTemplate(
+                        List.of(new HordeNavigation.Waypoint(8, 64, 0)),
+                        new HordeNavigation.Waypoint(100, 64, 0),
+                        20,
+                        7));
+        List<HordeNavigation.RouteEntry> routes = List.of(createdAtTen, createdAtTwenty);
+
+        assertEquals(2, HordeNavigation.sharedRouteCount(routes, 109));
+        assertEquals(1, HordeNavigation.sharedRouteCount(routes, 110));
+        assertEquals(1, HordeNavigation.sharedRouteCount(routes, 119));
+        assertEquals(0, HordeNavigation.sharedRouteCount(routes, 120));
+    }
+
+    @Test
     void reportsBlockedOnlyAfterDistanceToTheWaypointStopsImprovingAndAnIndependentPathFails() {
         assertEquals(HordeNavigation.Recovery.MOVING, HordeNavigation.sampleProgress(0.25));
         assertEquals(HordeNavigation.Recovery.RETRY_INDEPENDENT, HordeNavigation.sampleProgress(0.24));

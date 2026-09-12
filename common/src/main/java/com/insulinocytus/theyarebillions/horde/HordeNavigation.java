@@ -1,5 +1,6 @@
 package com.insulinocytus.theyarebillions.horde;
 
+import com.insulinocytus.theyarebillions.TheyAreBillions;
 import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.List;
@@ -44,6 +45,28 @@ public final class HordeNavigation {
         ROUTES.remove(level);
         FOLLOWERS.entrySet().removeIf(entry -> entry.getKey().level() == level);
         HordeBlockBreaking.onLevelUnload(level);
+    }
+
+    static int sharedRouteCount() {
+        int total = 0;
+        for (Map.Entry<ServerLevel, RouteCache> cached : ROUTES.entrySet()) {
+            total += sharedRouteCount(cached.getValue().entries.values(), cached.getKey().getGameTime());
+        }
+        return total;
+    }
+
+    static int sharedRouteCount(Iterable<RouteEntry> entries, long tick) {
+        int total = 0;
+        for (RouteEntry entry : entries) {
+            if (!isCachedRouteExpired(entry, tick)) {
+                total++;
+            }
+        }
+        return total;
+    }
+
+    private static boolean isCachedRouteExpired(RouteEntry entry, long tick) {
+        return entry.invalid || tick - entry.template.createdTick() >= ROUTE_TTL_TICKS;
     }
 
     public static boolean tick(Zombie zombie) {
@@ -131,9 +154,11 @@ public final class HordeNavigation {
                     && zombie.getNavigation().isDone()
                     && acquirePathfinding(cache, zombie, follower, tick)) {
                 Path path = zombie.getNavigation().createPath(target.blockPosition(), 0);
-                if ((path == null || !path.canReach())
-                        && tryStartDigging(zombie, target.blockPosition(), follower, target)) {
-                    return true;
+                if (path == null || !path.canReach()) {
+                    if (tryStartDigging(zombie, target.blockPosition(), follower, target)) {
+                        return true;
+                    }
+                    logPathFailure(zombie, target.blockPosition());
                 }
             }
             return false;
@@ -153,9 +178,11 @@ public final class HordeNavigation {
             follower.useVanilla(zombie);
             if (acquirePathfinding(cache, zombie, follower, tick)) {
                 Path path = zombie.getNavigation().createPath(target, 0);
-                if ((path == null || !path.canReach())
-                        && tryStartDigging(zombie, target.blockPosition(), follower, target)) {
-                    return true;
+                if (path == null || !path.canReach()) {
+                    if (tryStartDigging(zombie, target.blockPosition(), follower, target)) {
+                        return true;
+                    }
+                    logPathFailure(zombie, target.blockPosition());
                 }
                 if (path != null) {
                     zombie.getNavigation().moveTo(path, SPEED);
@@ -277,6 +304,7 @@ public final class HordeNavigation {
             if (path == null || !zombie.getNavigation().moveTo(path, SPEED)) {
                 follower.vanillaFallback = false;
                 follower.fallbackPathStarted = false;
+                logPathFailure(zombie, target.blockPosition());
                 return false;
             }
             follower.fallbackPathStarted = true;
@@ -304,13 +332,15 @@ public final class HordeNavigation {
         if (reportRouteFailure) {
             zombie.getNavigation().stop();
         }
-        Path path = zombie.getNavigation().createPath(new BlockPos(waypoint.x(), waypoint.y(), waypoint.z()), 0);
+        BlockPos waypointPos = new BlockPos(waypoint.x(), waypoint.y(), waypoint.z());
+        Path path = zombie.getNavigation().createPath(waypointPos, 0);
         if (afterIndependentRetry(path != null && path.canReach()) == Recovery.BLOCKED) {
-            if (tryStartDigging(zombie, new BlockPos(waypoint.x(), waypoint.y(), waypoint.z()), follower, target)) {
+            if (tryStartDigging(zombie, waypointPos, follower, target)) {
                 return true;
             }
             if (reportRouteFailure && follower.reportFailure(route, follower.cursor)) {
                 route.failed(follower.cursor);
+                logPathFailure(zombie, waypointPos);
             }
         } else {
             route.succeeded(follower.cursor);
@@ -501,6 +531,12 @@ public final class HordeNavigation {
             fingerprint = 31 * fingerprint + level.getBlockState(pos).hashCode();
         }
         return fingerprint;
+    }
+
+    private static void logPathFailure(Zombie zombie, BlockPos to) {
+        if (TheyAreBillions.LOGGER.isDebugEnabled()) {
+            TheyAreBillions.LOGGER.debug("Horde path failed from {} toward {}", zombie.blockPosition(), to);
+        }
     }
 
     enum Mode {
@@ -695,12 +731,11 @@ public final class HordeNavigation {
                 return;
             }
             maintenanceTick = tick;
-            entries.values().removeIf(entry -> entry.invalid
-                    || tick - entry.template.createdTick() >= ROUTE_TTL_TICKS);
+            entries.values().removeIf(entry -> isCachedRouteExpired(entry, tick));
             int checks = Math.min(TERRAIN_CHECKS_PER_TICK, terrainChecks.size());
             for (int i = 0; i < checks; i++) {
                 RouteEntry entry = terrainChecks.removeFirst();
-                if (entry.invalid || tick - entry.template.createdTick() >= ROUTE_TTL_TICKS) {
+                if (isCachedRouteExpired(entry, tick)) {
                     continue;
                 }
                 entry.validateTerrain(level);
@@ -728,6 +763,7 @@ public final class HordeNavigation {
             }
             Path path = zombie.getNavigation().createPath(target, 0);
             if (path == null || path.getNodeCount() == 0) {
+                logPathFailure(zombie, target);
                 return new RouteResult(null, true);
             }
             List<Waypoint> waypoints = java.util.stream.IntStream.range(0, path.getNodeCount())
@@ -735,6 +771,7 @@ public final class HordeNavigation {
                     .map(Waypoint::of)
                     .toList();
             if (!makesForwardProgress(position, targetPoint, waypoints.getLast())) {
+                logPathFailure(zombie, target);
                 return new RouteResult(null, true);
             }
             RouteTemplate template = new RouteTemplate(

@@ -1,6 +1,7 @@
 package com.insulinocytus.theyarebillions;
 
 import com.insulinocytus.theyarebillions.horde.HordeGameRules;
+import com.insulinocytus.theyarebillions.horde.HordeAdmin;
 import com.insulinocytus.theyarebillions.horde.HordeChunkTickets;
 import com.insulinocytus.theyarebillions.horde.HordeNavigation;
 import com.insulinocytus.theyarebillions.horde.HordeDaytimeCleanup;
@@ -23,6 +24,7 @@ public final class TheyAreBillions {
 
     public static void initialize() {
         HordeGameRules.register();
+        HordeAdmin.initialize();
         LifecycleEvent.SERVER_LEVEL_UNLOAD.register(level -> {
             HordeChunkTickets.onLevelUnload(level);
             HordeNavigation.onLevelUnload(level);

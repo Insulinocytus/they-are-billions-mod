@@ -160,6 +160,10 @@ public final class HordePlanner {
         return groups;
     }
 
+    static int connectedGroupCount(List<PlayerRef> players) {
+        return connectedGroups(players).size();
+    }
+
     private static NightState nextNightState(
             NightState previous,
             long dayTime,

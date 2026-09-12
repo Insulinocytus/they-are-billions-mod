@@ -103,6 +103,11 @@ public final class HordeSpawnGameTests {
     }
 
     @GameTest(template = "empty")
+    public static void adminStatusAndLogLevelArePrivateAndPersistent(GameTestHelper helper) {
+        HordeGameTests.adminStatusAndLogLevelArePrivateAndPersistent(helper);
+    }
+
+    @GameTest(template = "empty")
     public static void namingDuringFinalizeKeepsVanillaTraits(GameTestHelper helper) {
         helper.getLevel().getServer().setDifficulty(Difficulty.NORMAL, true);
         helper.setBlock(new BlockPos(2, 1, 2), Blocks.GRASS_BLOCK);

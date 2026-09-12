@@ -1,5 +1,6 @@
 package com.insulinocytus.theyarebillions.horde;
 
+import com.insulinocytus.theyarebillions.TheyAreBillions;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.WeakHashMap;
@@ -25,9 +26,20 @@ public final class HordePerformance {
         if (state.tickStartNanos == Long.MIN_VALUE) {
             return;
         }
+        Tier previous = state.tracker.tier();
         state.tracker.sample(Util.getNanos() - state.tickStartNanos);
         state.tickStartNanos = Long.MIN_VALUE;
-        HordeNavigation.setActiveSiteLimit(state.tracker.tier().diggingLimit());
+        Tier next = state.tracker.tier();
+        if (next != previous) {
+            if (next.ordinal() > previous.ordinal()) {
+                if (HordeAdmin.allows(HordeAdmin.LogLevel.WARN)) {
+                    TheyAreBillions.LOGGER.warn("Horde performance degraded to {}", next);
+                }
+            } else if (HordeAdmin.allows(HordeAdmin.LogLevel.INFO)) {
+                TheyAreBillions.LOGGER.info("Horde performance recovered to {}", next);
+            }
+        }
+        HordeNavigation.setActiveSiteLimit(next.diggingLimit());
     }
 
     static int spawnLimit(MinecraftServer server) {
@@ -38,6 +50,10 @@ public final class HordePerformance {
         return state(server).tracker.tier().simulationIntervalMultiplier();
     }
 
+
+    static Tier currentTier(MinecraftServer server) {
+        return state(server).tracker.tier();
+    }
     private static ServerState state(MinecraftServer server) {
         return SERVERS.computeIfAbsent(server, ignored -> new ServerState());
     }
