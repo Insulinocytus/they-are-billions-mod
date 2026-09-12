@@ -317,6 +317,7 @@ public final class HordeGameTests {
     public static void emptyPlayersReleasePlatformHordeTickets(GameTestHelper helper) {
         ChunkPos origin = new ChunkPos(helper.absolutePos(BlockPos.ZERO));
         ChunkPos distant = new ChunkPos(origin.x + 12, origin.z);
+        HordePlanner.ChunkRef chunk = new HordePlanner.ChunkRef(distant.x, distant.z);
         BlockPos center = distant.getMiddleBlockPosition(0);
         ServerLevel level = helper.getLevel();
         level.getServer().setDifficulty(Difficulty.NORMAL, true);
@@ -326,28 +327,46 @@ public final class HordeGameTests {
                 level.getMinBuildHeight() + 1,
                 level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, center.getX(), center.getZ()));
         BlockPos feet = new BlockPos(center.getX(), y, center.getZ());
-        level.setBlock(feet.below(), Blocks.GRASS_BLOCK.defaultBlockState(), 3);
-        level.setBlock(feet, Blocks.AIR.defaultBlockState(), 3);
-        level.setBlock(feet.above(), Blocks.AIR.defaultBlockState(), 3);
-        boolean[] spawned = {false};
+        boolean[] started = {false};
         helper.onEachTick(() -> {
-            if (!spawned[0]) {
-                if (!level.isPositionEntityTicking(center)) {
-                    return;
-                }
-                if (!HordeSpawner.spawnHordeMember(level, feet)) {
-                    return;
-                }
-                spawned[0] = true;
+            if (started[0] || !level.isPositionEntityTicking(center)) {
                 return;
             }
-            HordeChunkTickets.tick(level, List.of());
+            for (int index = 0; index <= HordeDaytimeCleanup.REMOVALS_PER_TICK; index++) {
+                BlockPos spawn = feet.offset(index % 4, 0, index / 4);
+                level.setBlock(spawn.below(), Blocks.GRASS_BLOCK.defaultBlockState(), 3);
+                level.setBlock(spawn, Blocks.AIR.defaultBlockState(), 3);
+                level.setBlock(spawn.above(), Blocks.AIR.defaultBlockState(), 3);
+                helper.assertTrue(HordeSpawner.spawnHordeMember(level, spawn), "horde member should spawn");
+            }
+            HordeChunkTickets.TickResult first = HordeChunkTickets.tick(level, List.of());
+            helper.assertTrue(
+                    first.removed() == HordeDaytimeCleanup.REMOVALS_PER_TICK,
+                    "first cleanup should remove ten members");
+            helper.assertTrue(
+                    HordeChunkData.get(level).occupancy().getOrDefault(chunk, 0) == 1,
+                    "first cleanup should leave one horde member");
+            helper.assertTrue(
+                    HordeChunkTickets.hasActive(level, chunk),
+                    "partial empty-player cleanup should retain planning state");
+            HordeChunkTickets.TickResult second = HordeChunkTickets.tick(level, List.of());
+            helper.assertTrue(second.removed() == 1, "second cleanup should remove the final member");
+            helper.assertTrue(
+                    !HordeChunkData.get(level).occupancy().containsKey(chunk),
+                    "final cleanup should clear occupancy");
+            helper.assertTrue(
+                    !HordeChunkTickets.hasActive(level, chunk),
+                    "final cleanup should clear planning state");
+            started[0] = true;
         });
         helper.succeedWhen(() -> {
-            helper.assertTrue(spawned[0], "horde member should spawn in ticketed chunk");
+            helper.assertTrue(started[0], "horde members should spawn in the ticketed chunk");
+            helper.assertTrue(
+                    !HordeChunkData.get(level).occupancy().containsKey(chunk),
+                    "empty-player cleanup should remove every ordinary horde member");
             helper.assertTrue(
                     !level.isPositionEntityTicking(center),
-                    "empty-player cleanup should release the platform chunk ticket");
+                    "final empty-player cleanup should release the platform chunk ticket");
         });
     }
 

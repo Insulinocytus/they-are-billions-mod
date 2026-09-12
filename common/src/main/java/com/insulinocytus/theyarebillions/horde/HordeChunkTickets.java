@@ -29,8 +29,17 @@ public final class HordeChunkTickets {
             HordePlanner.TicketPlan plan = HordePlanner.planTickets(
                     new HordePlanner.TicketSnapshot(players, memberRefs(members), state.activeCounts));
             int removed = removeMembers(members, plan.removeMemberIds(), HordeDaytimeCleanup.REMOVALS_PER_TICK);
-            plan.release().forEach(chunk -> release(level, chunk));
-            state.reset();
+            Map<HordePlanner.ChunkRef, Integer> nextCounts = new HashMap<>();
+            loadedMembers(level).stream()
+                    .filter(zombie -> !zombie.isPersistenceRequired() && !zombie.hasCustomName())
+                    .forEach(zombie -> nextCounts.merge(chunk(zombie), 1, Integer::sum));
+            nextCounts.keySet().retainAll(state.activeCounts.keySet());
+            plan.release().stream()
+                    .filter(chunk -> !nextCounts.containsKey(chunk))
+                    .forEach(chunk -> release(level, chunk));
+            state.activeCounts.clear();
+            state.activeCounts.putAll(nextCounts);
+            state.pendingRecovery.retainAll(nextCounts.keySet());
             recountLoadedOccupancy(level, data, loadedMembers(level));
             return new TickResult(false, removed);
         }
@@ -71,6 +80,11 @@ public final class HordeChunkTickets {
         state.activeCounts.putAll(nextCounts);
         recountLoadedOccupancy(level, data, loadedMembers(level));
         return new TickResult(true, removed);
+    }
+
+    static boolean hasActive(ServerLevel level, HordePlanner.ChunkRef chunk) {
+        State state = STATES.get(level);
+        return state != null && state.activeCounts.containsKey(chunk);
     }
 
     static boolean beforeSpawn(ServerLevel level, Zombie zombie) {

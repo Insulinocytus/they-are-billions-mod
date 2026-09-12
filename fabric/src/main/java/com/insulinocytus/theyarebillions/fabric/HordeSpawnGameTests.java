@@ -80,7 +80,7 @@ public final class HordeSpawnGameTests {
         HordeGameTests.daytimeCleanupReleasesHordeTickets(helper);
     }
 
-    @GameTest(template = HordeGameTests.EMPTY_TEMPLATE, timeoutTicks = 40)
+    @GameTest(template = HordeGameTests.EMPTY_TEMPLATE, timeoutTicks = 80)
     public void emptyPlayersReleasePlatformHordeTickets(GameTestHelper helper) {
         HordeGameTests.emptyPlayersReleasePlatformHordeTickets(helper);
     }
