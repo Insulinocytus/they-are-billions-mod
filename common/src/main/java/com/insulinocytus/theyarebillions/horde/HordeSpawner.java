@@ -86,7 +86,8 @@ public final class HordeSpawner {
                         countOrdinaryZombies(server),
                         players,
                         night.state()),
-                () -> level.random.nextDouble() * (Math.PI * 2.0));
+                () -> level.random.nextDouble() * (Math.PI * 2.0),
+                HordePerformance.spawnLimit(server));
         night.setState(plan.night());
         HordeDaytimeCleanup.tick(
                 level, players, HordeDaytimeCleanup.REMOVALS_PER_TICK - tickets.removed());
