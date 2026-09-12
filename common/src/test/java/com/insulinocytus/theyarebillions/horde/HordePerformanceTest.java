@@ -25,6 +25,16 @@ class HordePerformanceTest {
     }
 
     @Test
+    void recoveryRequiresEveryTickInTheWindowBelowFortyMs() {
+        HordePerformance.Tracker tracker = new HordePerformance.Tracker(HordePerformance.Tier.PAUSED);
+
+        sample(tracker, LOW, 190);
+        sample(tracker, 42_000_000L, 10);
+        assertEquals(HordePerformance.Tier.PAUSED, tracker.tier());
+        assertPlan(tracker, 18000, 0, 1000, 0);
+    }
+
+    @Test
     void degradesOnePlanningTierPerTwoHundredHighTicks() {
         HordePerformance.Tracker tracker = new HordePerformance.Tracker();
         HordeDiggingCoordinator<String> digging = new HordeDiggingCoordinator<>();
