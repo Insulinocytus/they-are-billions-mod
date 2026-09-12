@@ -8,6 +8,7 @@ import java.util.WeakHashMap;
 import java.util.function.IntPredicate;
 import java.util.function.Predicate;
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.ai.attributes.Attributes;
@@ -22,11 +23,27 @@ public final class HordeNavigation {
     private static final int TERRAIN_CHECKS_PER_TICK = 16;
     private static final int PATH_RETRY_TICKS = 20;
     private static final int PROGRESS_SAMPLE_TICKS = 20;
+    private static final double HUNT_RANGE_SQUARED =
+            (double) HordePlanner.TICKET_RANGE * HordePlanner.TICKET_RANGE;
     private static final double SPEED = 1.0;
     private static final Map<Zombie, Follower> FOLLOWERS = new WeakHashMap<>();
     private static final Map<ServerLevel, RouteCache> ROUTES = new WeakHashMap<>();
 
     private HordeNavigation() {
+    }
+
+    public static void setActiveSiteLimit(int limit) {
+        HordeBlockBreaking.setActiveSiteLimit(limit);
+    }
+
+    public static void onServerTick(MinecraftServer server) {
+        HordeBlockBreaking.onServerTick(server);
+    }
+
+    public static void onLevelUnload(ServerLevel level) {
+        ROUTES.remove(level);
+        FOLLOWERS.entrySet().removeIf(entry -> entry.getKey().level() == level);
+        HordeBlockBreaking.onLevelUnload(level);
     }
 
     public static boolean tick(Zombie zombie) {
@@ -54,7 +71,10 @@ public final class HordeNavigation {
         double followRange = zombie.getAttributeValue(Attributes.FOLLOW_RANGE);
         TargetingConditions conditions = TargetingConditions.forCombat().range(followRange);
         ServerPlayer target = nearestOwnedServerPlayer(
-                group, level.players(), zombie.position(), HordeSpawner::isValidPlayer);
+                group,
+                level.players(),
+                zombie.position(),
+                player -> HordeSpawner.isValidPlayer(player) && isHuntTargetValid(player, zombie));
         if (zombie.getTarget() instanceof ServerPlayer player) {
             String playerId = player.getUUID().toString();
             boolean assigned = playerId.equals(follower.attackTargetId);
@@ -82,20 +102,18 @@ public final class HordeNavigation {
         RouteCache cache = ROUTES.computeIfAbsent(level, ignored -> new RouteCache());
         cache.maintain(level, tick);
         if (follower.digging != null) {
-            HordeBlockBreaking.TickResult result = HordeBlockBreaking.tick(level, zombie, follower.digging);
-            if (result == HordeBlockBreaking.TickResult.ACTIVE) {
+            if (target == null || !target.getUUID().toString().equals(follower.diggingTargetId)) {
+                follower.useVanilla(zombie);
+            } else {
+                HordeBlockBreaking.TickResult result = HordeBlockBreaking.tick(level, zombie, follower.digging);
+                if (result == HordeBlockBreaking.TickResult.ACTIVE) {
+                    return true;
+                }
+                follower.digging = null;
+                follower.diggingTargetId = null;
+                follower.useVanilla(zombie);
                 return true;
             }
-            follower.digging = null;
-            if (result == HordeBlockBreaking.TickResult.DENIED) {
-                follower.deniedPos = follower.lastDiggingPos;
-                follower.deniedUntilTick = tick + 100;
-            } else {
-                follower.deniedPos = null;
-            }
-            follower.lastDiggingPos = null;
-            follower.useVanilla(zombie);
-            return true;
         }
 
         double targetDistance = zombie.distanceTo(target);
@@ -118,7 +136,7 @@ public final class HordeNavigation {
                     && acquirePathfinding(cache, zombie, follower, tick)) {
                 Path path = zombie.getNavigation().createPath(target.blockPosition(), 0);
                 if ((path == null || !path.canReach())
-                        && tryStartDigging(zombie, target.blockPosition(), follower, tick)) {
+                        && tryStartDigging(zombie, target.blockPosition(), follower, target)) {
                     return true;
                 }
             }
@@ -140,7 +158,7 @@ public final class HordeNavigation {
             if (acquirePathfinding(cache, zombie, follower, tick)) {
                 Path path = zombie.getNavigation().createPath(target, 0);
                 if ((path == null || !path.canReach())
-                        && tryStartDigging(zombie, target.blockPosition(), follower, tick)) {
+                        && tryStartDigging(zombie, target.blockPosition(), follower, target)) {
                     return true;
                 }
                 if (path != null) {
@@ -209,7 +227,7 @@ public final class HordeNavigation {
                 follower.clearFailure();
                 follower.sample(route, follower.cursor, distanceToWaypoint, tick);
             } else {
-                if (connect(cache, zombie, follower, route, tick, true)) {
+                if (connect(cache, zombie, follower, route, tick, true, target)) {
                     follower.sample(route, follower.cursor, distanceToWaypoint, tick);
                 }
                 return;
@@ -234,7 +252,7 @@ public final class HordeNavigation {
                 return;
             }
             follower.cursor = connection;
-            connect(cache, zombie, follower, route, tick, false);
+            connect(cache, zombie, follower, route, tick, false, target);
         }
     }
 
@@ -246,7 +264,7 @@ public final class HordeNavigation {
             }
             Path path = zombie.getNavigation().createPath(target, 0);
             if ((path == null || !path.canReach())
-                    && tryStartDigging(zombie, target.blockPosition(), follower, tick)) {
+                    && tryStartDigging(zombie, target.blockPosition(), follower, target)) {
                 follower.vanillaFallback = false;
                 follower.fallbackPathStarted = false;
                 return true;
@@ -272,7 +290,8 @@ public final class HordeNavigation {
             Follower follower,
             RouteEntry route,
             long tick,
-            boolean reportRouteFailure) {
+            boolean reportRouteFailure,
+            ServerPlayer target) {
         if (!acquirePathfinding(cache, zombie, follower, tick)) {
             return false;
         }
@@ -282,7 +301,7 @@ public final class HordeNavigation {
         }
         Path path = zombie.getNavigation().createPath(new BlockPos(waypoint.x(), waypoint.y(), waypoint.z()), 0);
         if (afterIndependentRetry(path != null && path.canReach()) == Recovery.BLOCKED) {
-            if (tryStartDigging(zombie, new BlockPos(waypoint.x(), waypoint.y(), waypoint.z()), follower, tick)) {
+            if (tryStartDigging(zombie, new BlockPos(waypoint.x(), waypoint.y(), waypoint.z()), follower, target)) {
                 return true;
             }
             if (reportRouteFailure && follower.reportFailure(route, follower.cursor)) {
@@ -295,24 +314,18 @@ public final class HordeNavigation {
         }
         return true;
     }
-    private static boolean tryStartDigging(Zombie zombie, BlockPos nextStep, Follower follower, long tick) {
-        ServerLevel level = (ServerLevel) zombie.level();
-        BlockPos denied = tick < follower.deniedUntilTick ? follower.deniedPos : null;
-        HordeBlockBreaking.StartResult result = HordeBlockBreaking.start(level, zombie, nextStep, denied);
+
+    private static boolean tryStartDigging(
+            Zombie zombie, BlockPos nextStep, Follower follower, ServerPlayer target) {
+        HordeBlockBreaking.StartResult result =
+                HordeBlockBreaking.start((ServerLevel) zombie.level(), zombie, nextStep);
         if (result.digging() != null) {
             follower.digging = result.digging();
-            follower.lastDiggingPos = result.digging().pos();
-            follower.deniedPos = null;
+            follower.diggingTargetId = target.getUUID().toString();
             return true;
-        }
-        if (result.deniedPos() != null) {
-            follower.deniedPos = result.deniedPos();
-            follower.deniedUntilTick = tick + 100;
         }
         return false;
     }
-
-
 
     private static boolean acquirePathfinding(RouteCache cache, Zombie zombie, Follower follower, long tick) {
         if (zombie.tickCount < follower.nextPathTick || !cache.acquire(tick)) {
@@ -372,6 +385,25 @@ public final class HordeNavigation {
             return !assigned;
         }
         return group.memberIds().contains(playerId) && (!assigned || attackable);
+    }
+
+    static boolean isHuntTargetValid(ServerPlayer target, Zombie zombie) {
+        return target != null
+                && isHuntTargetValid(
+                        target.isAlive(),
+                        !target.isRemoved(),
+                        target.level() == zombie.level(),
+                        HordeSpawner.isValidPlayer(target),
+                        zombie.distanceToSqr(target));
+    }
+
+    static boolean isHuntTargetValid(
+            boolean alive,
+            boolean present,
+            boolean sameLevel,
+            boolean validPlayer,
+            double distanceSquared) {
+        return alive && present && sameLevel && validPlayer && distanceSquared <= HUNT_RANGE_SQUARED;
     }
 
     static Mode mode(Mode current, double distance) {
@@ -537,9 +569,7 @@ public final class HordeNavigation {
         private boolean fallbackPathStarted;
         private String attackTargetId;
         private HordeBlockBreaking.Digging digging;
-        private BlockPos lastDiggingPos;
-        private BlockPos deniedPos;
-        private long deniedUntilTick;
+        private String diggingTargetId;
 
         Follower(long tick, int nextPathTick) {
             lastSampleTick = tick;
@@ -550,7 +580,7 @@ public final class HordeNavigation {
             if (digging != null) {
                 HordeBlockBreaking.stop((ServerLevel) zombie.level(), zombie, digging);
                 digging = null;
-                lastDiggingPos = null;
+                diggingTargetId = null;
             }
             if (mode == Mode.SHARED || vanillaFallback) {
                 zombie.getNavigation().stop();
