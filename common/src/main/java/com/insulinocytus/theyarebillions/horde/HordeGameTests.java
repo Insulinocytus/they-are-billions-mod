@@ -205,6 +205,7 @@ public final class HordeGameTests {
         });
     }
 
+    @SuppressWarnings("removal")
     private static ServerPlayer nearbyPlayer(GameTestHelper helper, double x, double y, double z) {
         ServerPlayer player = helper.makeMockServerPlayerInLevel();
         player.gameMode.changeGameModeForPlayer(GameType.SURVIVAL);
