@@ -6,6 +6,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.Difficulty;
@@ -23,6 +24,7 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.Vec3;
 
 public final class HordeGameTests {
@@ -310,6 +312,43 @@ public final class HordeGameTests {
                 !HordeChunkData.get(helper.getLevel()).occupancy().containsKey(chunk),
                 "cleanup should release occupancy and planning state");
         helper.succeed();
+    }
+
+    public static void emptyPlayersReleasePlatformHordeTickets(GameTestHelper helper) {
+        ChunkPos origin = new ChunkPos(helper.absolutePos(BlockPos.ZERO));
+        ChunkPos distant = new ChunkPos(origin.x + 12, origin.z);
+        BlockPos center = distant.getMiddleBlockPosition(0);
+        ServerLevel level = helper.getLevel();
+        level.getServer().setDifficulty(Difficulty.NORMAL, true);
+        HordeChunkTicketAccess.acquireOrRenew(level, distant);
+        level.getChunk(distant.x, distant.z);
+        int y = Math.max(
+                level.getMinBuildHeight() + 1,
+                level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, center.getX(), center.getZ()));
+        BlockPos feet = new BlockPos(center.getX(), y, center.getZ());
+        level.setBlock(feet.below(), Blocks.GRASS_BLOCK.defaultBlockState(), 3);
+        level.setBlock(feet, Blocks.AIR.defaultBlockState(), 3);
+        level.setBlock(feet.above(), Blocks.AIR.defaultBlockState(), 3);
+        boolean[] spawned = {false};
+        helper.onEachTick(() -> {
+            if (!spawned[0]) {
+                if (!level.isPositionEntityTicking(center)) {
+                    return;
+                }
+                if (!HordeSpawner.spawnHordeMember(level, feet)) {
+                    return;
+                }
+                spawned[0] = true;
+                return;
+            }
+            HordeChunkTickets.tick(level, List.of());
+        });
+        helper.succeedWhen(() -> {
+            helper.assertTrue(spawned[0], "horde member should spawn in ticketed chunk");
+            helper.assertTrue(
+                    !level.isPositionEntityTicking(center),
+                    "empty-player cleanup should release the platform chunk ticket");
+        });
     }
 
 

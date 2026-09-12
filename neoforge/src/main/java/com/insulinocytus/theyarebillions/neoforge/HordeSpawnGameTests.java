@@ -97,6 +97,11 @@ public final class HordeSpawnGameTests {
         HordeGameTests.daytimeCleanupReleasesHordeTickets(helper);
     }
 
+    @GameTest(template = "empty", timeoutTicks = 40)
+    public static void emptyPlayersReleasePlatformHordeTickets(GameTestHelper helper) {
+        HordeGameTests.emptyPlayersReleasePlatformHordeTickets(helper);
+    }
+
     @GameTest(template = "empty")
     public static void namingDuringFinalizeKeepsVanillaTraits(GameTestHelper helper) {
         helper.getLevel().getServer().setDifficulty(Difficulty.NORMAL, true);

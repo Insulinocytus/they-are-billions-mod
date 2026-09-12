@@ -14,6 +14,7 @@ import net.minecraft.core.SectionPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.monster.Zombie;
+import net.minecraft.world.level.Level;
 
 public final class HordeDaytimeCleanup {
     static final int SECTION_LIMIT = 4;
@@ -35,7 +36,7 @@ public final class HordeDaytimeCleanup {
         if (!HordeIdentity.isOrdinaryZombie(zombie) || namedOrPersistent(zombie)) {
             return false;
         }
-        if (!(zombie.level() instanceof ServerLevel level)) {
+        if (!(zombie.level() instanceof ServerLevel level) || level.dimension() != Level.OVERWORLD) {
             return false;
         }
         SUNLIT.computeIfAbsent(level, ignored -> Collections.newSetFromMap(new WeakHashMap<>())).add(zombie);

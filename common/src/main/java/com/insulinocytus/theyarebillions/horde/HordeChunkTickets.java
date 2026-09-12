@@ -29,6 +29,7 @@ public final class HordeChunkTickets {
             HordePlanner.TicketPlan plan = HordePlanner.planTickets(
                     new HordePlanner.TicketSnapshot(players, memberRefs(members), state.activeCounts));
             int removed = removeMembers(members, plan.removeMemberIds(), HordeDaytimeCleanup.REMOVALS_PER_TICK);
+            plan.release().forEach(chunk -> release(level, chunk));
             state.reset();
             recountLoadedOccupancy(level, data, loadedMembers(level));
             return new TickResult(false, removed);
