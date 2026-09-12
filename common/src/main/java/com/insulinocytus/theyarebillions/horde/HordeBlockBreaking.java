@@ -330,7 +330,7 @@ final class HordeBlockBreaking {
     }
 
     private static void logDiggingFailure(BlockPos pos, String reason) {
-        if (HordeAdmin.debugEnabled()) {
+        if (TheyAreBillions.LOGGER.isDebugEnabled()) {
             TheyAreBillions.LOGGER.debug("Horde digging failed at {} ({})", pos, reason);
         }
     }

@@ -1,7 +1,10 @@
 package com.insulinocytus.theyarebillions.horde;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.insulinocytus.theyarebillions.TheyAreBillions;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -56,5 +59,17 @@ class HordeAdminTest {
         assertEquals(
                 "hordeMembers=12 ordinaryZombies=34 playerGroups=2 ticketChunks=5 sharedRoutes=7 diggingSites=3 performanceTier=MINIMUM logLevel=WARN",
                 HordeAdmin.formatStatus(status));
+    }
+
+    @Test
+    void applySwitchesTheModLoggerImmediately() {
+        HordeAdmin.apply(HordeAdmin.LogLevel.DEBUG);
+        try {
+            assertTrue(TheyAreBillions.LOGGER.isDebugEnabled());
+            HordeAdmin.apply(HordeAdmin.LogLevel.INFO);
+            assertFalse(TheyAreBillions.LOGGER.isDebugEnabled());
+        } finally {
+            HordeAdmin.apply(HordeAdmin.LogLevel.INFO);
+        }
     }
 }

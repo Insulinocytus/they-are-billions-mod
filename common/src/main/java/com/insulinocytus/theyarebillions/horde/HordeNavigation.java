@@ -140,11 +140,9 @@ public final class HordeNavigation {
                     && zombie.getNavigation().isDone()
                     && acquirePathfinding(cache, zombie, follower, tick)) {
                 Path path = zombie.getNavigation().createPath(target.blockPosition(), 0);
-                if (path == null || !path.canReach()) {
-                    if (tryStartDigging(zombie, target.blockPosition(), follower, target)) {
-                        return true;
-                    }
-                    logPathFailure(zombie.blockPosition(), target.blockPosition());
+                if ((path == null || !path.canReach())
+                        && tryStartDigging(zombie, target.blockPosition(), follower, target)) {
+                    return true;
                 }
             }
             return false;
@@ -164,11 +162,9 @@ public final class HordeNavigation {
             follower.useVanilla(zombie);
             if (acquirePathfinding(cache, zombie, follower, tick)) {
                 Path path = zombie.getNavigation().createPath(target, 0);
-                if (path == null || !path.canReach()) {
-                    if (tryStartDigging(zombie, target.blockPosition(), follower, target)) {
-                        return true;
-                    }
-                    logPathFailure(zombie.blockPosition(), target.blockPosition());
+                if ((path == null || !path.canReach())
+                        && tryStartDigging(zombie, target.blockPosition(), follower, target)) {
+                    return true;
                 }
                 if (path != null) {
                     zombie.getNavigation().moveTo(path, SPEED);
@@ -290,7 +286,6 @@ public final class HordeNavigation {
             if (path == null || !zombie.getNavigation().moveTo(path, SPEED)) {
                 follower.vanillaFallback = false;
                 follower.fallbackPathStarted = false;
-                logPathFailure(zombie.blockPosition(), target.blockPosition());
                 return false;
             }
             follower.fallbackPathStarted = true;
@@ -324,9 +319,9 @@ public final class HordeNavigation {
             if (tryStartDigging(zombie, waypointPos, follower, target)) {
                 return true;
             }
-            logPathFailure(zombie.blockPosition(), waypointPos);
             if (reportRouteFailure && follower.reportFailure(route, follower.cursor)) {
                 route.failed(follower.cursor);
+                logPathFailure(zombie, waypointPos);
             }
         } else {
             route.succeeded(follower.cursor);
@@ -519,9 +514,9 @@ public final class HordeNavigation {
         return fingerprint;
     }
 
-    private static void logPathFailure(BlockPos from, BlockPos to) {
-        if (HordeAdmin.debugEnabled()) {
-            TheyAreBillions.LOGGER.debug("Horde path failed from {} toward {}", from, to);
+    private static void logPathFailure(Zombie zombie, BlockPos to) {
+        if (TheyAreBillions.LOGGER.isDebugEnabled()) {
+            TheyAreBillions.LOGGER.debug("Horde path failed from {} toward {}", zombie.blockPosition(), to);
         }
     }
 
@@ -750,7 +745,6 @@ public final class HordeNavigation {
             }
             Path path = zombie.getNavigation().createPath(target, 0);
             if (path == null || path.getNodeCount() == 0) {
-                logPathFailure(zombie.blockPosition(), target);
                 return new RouteResult(null, true);
             }
             List<Waypoint> waypoints = java.util.stream.IntStream.range(0, path.getNodeCount())
@@ -758,7 +752,6 @@ public final class HordeNavigation {
                     .map(Waypoint::of)
                     .toList();
             if (!makesForwardProgress(position, targetPoint, waypoints.getLast())) {
-                logPathFailure(zombie.blockPosition(), target);
                 return new RouteResult(null, true);
             }
             RouteTemplate template = new RouteTemplate(

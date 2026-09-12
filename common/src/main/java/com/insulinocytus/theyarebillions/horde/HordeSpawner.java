@@ -180,7 +180,7 @@ public final class HordeSpawner {
                 mode == GameType.ADVENTURE);
     }
 
-    private static int countOrdinaryZombies(MinecraftServer server) {
+    static int countOrdinaryZombies(MinecraftServer server) {
         int ticking = 0;
         for (ServerLevel level : server.getAllLevels()) {
             for (Entity entity : level.getAllEntities()) {
@@ -200,7 +200,7 @@ public final class HordeSpawner {
     }
 
     private static boolean spawnFailed(BlockPos pos, String reason) {
-        if (HordeAdmin.debugEnabled()) {
+        if (TheyAreBillions.LOGGER.isDebugEnabled()) {
             TheyAreBillions.LOGGER.debug("Horde spawn failed at {} ({})", pos, reason);
         }
         return false;

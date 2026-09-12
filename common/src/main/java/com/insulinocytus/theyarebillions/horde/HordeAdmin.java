@@ -59,9 +59,6 @@ public final class HordeAdmin {
         Configurator.setLevel(TheyAreBillions.LOGGER.getName(), level.log4j());
     }
 
-    static boolean debugEnabled() {
-        return logLevel == LogLevel.DEBUG;
-    }
 
     static boolean allows(LogLevel required) {
         return logLevel.allows(required);
@@ -69,14 +66,10 @@ public final class HordeAdmin {
 
     static Status collect(MinecraftServer server) {
         int members = 0;
-        int ordinaryZombies = 0;
         for (ServerLevel level : server.getAllLevels()) {
             for (Entity entity : level.getAllEntities()) {
-                if (!HordeIdentity.isOrdinaryZombie(entity)) {
-                    continue;
-                }
-                ordinaryZombies++;
-                if (HordeIdentity.isHordeMember(entity)) {
+                if (HordeIdentity.isHordeMember(entity)
+                        && level.isPositionEntityTicking(entity.blockPosition())) {
                     members++;
                 }
             }
@@ -88,7 +81,7 @@ public final class HordeAdmin {
         }
         return new Status(
                 members,
-                ordinaryZombies,
+                HordeSpawner.countOrdinaryZombies(server),
                 groups,
                 HordeChunkTickets.activeChunkCount(),
                 HordeNavigation.sharedRouteCount(),

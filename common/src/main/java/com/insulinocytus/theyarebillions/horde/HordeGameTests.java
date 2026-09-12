@@ -388,7 +388,8 @@ public final class HordeGameTests {
         CommandSourceStack admin = server.createCommandSourceStack().withPermission(2).withSource(captured);
         CommandSourceStack denied = server.createCommandSourceStack().withPermission(1).withSource(captured);
         server.getCommands().performPrefixedCommand(admin, TheyAreBillions.MOD_ID + " log INFO");
-        helper.assertTrue(!HordeAdmin.debugEnabled(), "admin log INFO should restore the default");
+        helper.assertTrue(
+                !TheyAreBillions.LOGGER.isDebugEnabled(), "admin log INFO should restore the default");
         captured.messages.clear();
         server.getCommands().performPrefixedCommand(denied, TheyAreBillions.MOD_ID + " status");
         helper.assertTrue(
@@ -396,7 +397,8 @@ public final class HordeGameTests {
                 "permission 1 must not receive horde status");
         captured.messages.clear();
         server.getCommands().performPrefixedCommand(denied, TheyAreBillions.MOD_ID + " log DEBUG");
-        helper.assertTrue(!HordeAdmin.debugEnabled(), "permission 1 must not change the log level");
+        helper.assertTrue(
+                !TheyAreBillions.LOGGER.isDebugEnabled(), "permission 1 must not change the log level");
         captured.messages.clear();
         server.getCommands().performPrefixedCommand(admin, TheyAreBillions.MOD_ID + " status");
         helper.assertTrue(captured.messages.size() == 1, "status should return only to the executor");
@@ -411,7 +413,8 @@ public final class HordeGameTests {
         helper.assertTrue(status.contains("logLevel="), status);
         captured.messages.clear();
         server.getCommands().performPrefixedCommand(admin, TheyAreBillions.MOD_ID + " log DEBUG");
-        helper.assertTrue(HordeAdmin.debugEnabled(), "log command should apply immediately");
+        helper.assertTrue(
+                TheyAreBillions.LOGGER.isDebugEnabled(), "log command should apply immediately");
         try {
             helper.assertTrue(
                     "logLevel=DEBUG\n"
@@ -421,6 +424,8 @@ public final class HordeGameTests {
             throw new RuntimeException(exception);
         }
         server.getCommands().performPrefixedCommand(admin, TheyAreBillions.MOD_ID + " log INFO");
+        helper.assertTrue(
+                !TheyAreBillions.LOGGER.isDebugEnabled(), "restored INFO should disable debug");
         helper.succeed();
     }
 
