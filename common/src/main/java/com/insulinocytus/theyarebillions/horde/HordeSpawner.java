@@ -153,7 +153,10 @@ public final class HordeSpawner {
         int blockX = Mth.floor(sector.originX() + Math.cos(sector.directionRadians()) * distance);
         int blockZ = Mth.floor(sector.originZ() + Math.sin(sector.directionRadians()) * distance);
         if (!sector.containsBlockCenter(blockX, blockZ)) {
-            return spawnFailed(new BlockPos(blockX, 0, blockZ), "sector");
+            if (TheyAreBillions.LOGGER.isDebugEnabled()) {
+                return spawnFailed(new BlockPos(blockX, 0, blockZ), "sector");
+            }
+            return false;
         }
         level.getChunk(blockX >> 4, blockZ >> 4);
         int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, blockX, blockZ);

@@ -49,10 +49,24 @@ public final class HordeNavigation {
 
     static int sharedRouteCount() {
         int total = 0;
-        for (RouteCache cache : ROUTES.values()) {
-            total += cache.entries.size();
+        for (Map.Entry<ServerLevel, RouteCache> cached : ROUTES.entrySet()) {
+            total += sharedRouteCount(cached.getValue().entries.values(), cached.getKey().getGameTime());
         }
         return total;
+    }
+
+    static int sharedRouteCount(Iterable<RouteEntry> entries, long tick) {
+        int total = 0;
+        for (RouteEntry entry : entries) {
+            if (!isCachedRouteExpired(entry, tick)) {
+                total++;
+            }
+        }
+        return total;
+    }
+
+    private static boolean isCachedRouteExpired(RouteEntry entry, long tick) {
+        return entry.invalid || tick - entry.template.createdTick() >= ROUTE_TTL_TICKS;
     }
 
     public static boolean tick(Zombie zombie) {
@@ -717,12 +731,11 @@ public final class HordeNavigation {
                 return;
             }
             maintenanceTick = tick;
-            entries.values().removeIf(entry -> entry.invalid
-                    || tick - entry.template.createdTick() >= ROUTE_TTL_TICKS);
+            entries.values().removeIf(entry -> isCachedRouteExpired(entry, tick));
             int checks = Math.min(TERRAIN_CHECKS_PER_TICK, terrainChecks.size());
             for (int i = 0; i < checks; i++) {
                 RouteEntry entry = terrainChecks.removeFirst();
-                if (entry.invalid || tick - entry.template.createdTick() >= ROUTE_TTL_TICKS) {
+                if (isCachedRouteExpired(entry, tick)) {
                     continue;
                 }
                 entry.validateTerrain(level);
