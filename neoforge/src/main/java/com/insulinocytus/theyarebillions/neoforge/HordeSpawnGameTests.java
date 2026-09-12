@@ -87,6 +87,21 @@ public final class HordeSpawnGameTests {
         HordeGameTests.nearbyPlayerStillGetsPushed(helper);
     }
 
+    @GameTest(template = "empty", timeoutTicks = 400)
+    public static void daytimeCleanupRemovesSunlitWithoutDrops(GameTestHelper helper) {
+        HordeGameTests.daytimeCleanupRemovesSunlitWithoutDrops(helper);
+    }
+
+    @GameTest(template = "empty")
+    public static void daytimeCleanupReleasesHordeTickets(GameTestHelper helper) {
+        HordeGameTests.daytimeCleanupReleasesHordeTickets(helper);
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 80)
+    public static void emptyPlayersReleasePlatformHordeTickets(GameTestHelper helper) {
+        HordeGameTests.emptyPlayersReleasePlatformHordeTickets(helper);
+    }
+
     @GameTest(template = "empty")
     public static void namingDuringFinalizeKeepsVanillaTraits(GameTestHelper helper) {
         helper.getLevel().getServer().setDifficulty(Difficulty.NORMAL, true);

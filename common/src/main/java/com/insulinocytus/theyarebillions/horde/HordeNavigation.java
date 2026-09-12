@@ -49,21 +49,17 @@ public final class HordeNavigation {
     public static boolean tick(Zombie zombie) {
         if (!(zombie.level() instanceof ServerLevel level) || !HordeIdentity.isHordeMember(zombie)) {
             ((HordeMemberState) zombie).theyarebillions$restoreVanillaDoorBreaking();
-            Follower follower = FOLLOWERS.remove(zombie);
-            if (follower != null) {
-                follower.releaseAttackTarget(zombie);
-                follower.useVanilla(zombie);
-            }
+            release(zombie);
             return false;
         }
         ((HordeMemberState) zombie).theyarebillions$disableVanillaDoorBreaking();
+        if (!HordePlanner.isHordeNight(level.getDayTime())) {
+            release(zombie);
+            return false;
+        }
         HordePlanner.GroupIdentity group = HordeIdentity.group(zombie);
         if (group == null) {
-            Follower follower = FOLLOWERS.remove(zombie);
-            if (follower != null) {
-                follower.releaseAttackTarget(zombie);
-                follower.useVanilla(zombie);
-            }
+            release(zombie);
             return false;
         }
         Follower follower = FOLLOWERS.computeIfAbsent(zombie, ignored -> new Follower(
@@ -174,6 +170,15 @@ public final class HordeNavigation {
         }
         followShared(level, zombie, target, follower, cache, tick);
         return follower.mode == Mode.SHARED || follower.vanillaFallback;
+    }
+
+    static void release(Zombie zombie) {
+        Follower follower = FOLLOWERS.remove(zombie);
+        if (follower != null) {
+            follower.releaseAttackTarget(zombie);
+            follower.useVanilla(zombie);
+            zombie.getNavigation().stop();
+        }
     }
 
     private static void followShared(

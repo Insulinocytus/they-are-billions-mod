@@ -1,7 +1,10 @@
 package com.insulinocytus.theyarebillions.mixin;
 
+import com.insulinocytus.theyarebillions.horde.HordeDaytimeCleanup;
 import com.insulinocytus.theyarebillions.horde.HordeIdentity;
 import com.insulinocytus.theyarebillions.horde.HordeMemberState;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.monster.Zombie;
@@ -69,6 +72,18 @@ public abstract class ZombieMixin implements HordeMemberState {
     private void theyarebillions$loadDoorBreakingState(CompoundTag tag, CallbackInfo ci) {
         theyarebillions$doorBreakingDisabled = tag.getBoolean(THEYAREBILLIONS_DOOR_BREAKING_DISABLED);
         theyarebillions$couldBreakDoors = tag.getBoolean(THEYAREBILLIONS_COULD_BREAK_DOORS);
+    }
+
+    @WrapOperation(
+            method = "aiStep",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lnet/minecraft/world/entity/monster/Zombie;igniteForSeconds(F)V"))
+    private void theyarebillions$queueSunlitCleanup(Zombie instance, float seconds, Operation<Void> original) {
+        if (HordeDaytimeCleanup.queueSunlit(instance)) {
+            return;
+        }
+        original.call(instance, seconds);
     }
 
     @Inject(method = "convertsInWater", at = @At("HEAD"), cancellable = true)

@@ -15,13 +15,12 @@ import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.level.ChunkPos;
 
 public final class HordeChunkTickets {
-    private static final int OFFLINE_CLEANUP_LIMIT = 10;
     private static final Map<ServerLevel, State> STATES = new IdentityHashMap<>();
 
     private HordeChunkTickets() {
     }
 
-    static boolean tick(ServerLevel level, List<HordePlanner.PlayerRef> players) {
+    static TickResult tick(ServerLevel level, List<HordePlanner.PlayerRef> players) {
         State state = STATES.computeIfAbsent(level, ignored -> new State());
         HordeChunkData data = HordeChunkData.get(level);
         List<Zombie> members = loadedMembers(level);
@@ -29,10 +28,20 @@ public final class HordeChunkTickets {
         if (players.isEmpty()) {
             HordePlanner.TicketPlan plan = HordePlanner.planTickets(
                     new HordePlanner.TicketSnapshot(players, memberRefs(members), state.activeCounts));
-            removeMembers(members, plan.removeMemberIds(), OFFLINE_CLEANUP_LIMIT);
-            state.reset();
+            int removed = removeMembers(members, plan.removeMemberIds(), HordeDaytimeCleanup.REMOVALS_PER_TICK);
+            Map<HordePlanner.ChunkRef, Integer> nextCounts = new HashMap<>();
+            loadedMembers(level).stream()
+                    .filter(zombie -> !zombie.isPersistenceRequired() && !zombie.hasCustomName())
+                    .forEach(zombie -> nextCounts.merge(chunk(zombie), 1, Integer::sum));
+            nextCounts.keySet().retainAll(state.activeCounts.keySet());
+            plan.release().stream()
+                    .filter(chunk -> !nextCounts.containsKey(chunk))
+                    .forEach(chunk -> release(level, chunk));
+            state.activeCounts.clear();
+            state.activeCounts.putAll(nextCounts);
+            state.pendingRecovery.retainAll(nextCounts.keySet());
             recountLoadedOccupancy(level, data, loadedMembers(level));
-            return false;
+            return new TickResult(false, removed);
         }
 
         data.occupancy().entrySet().stream()
@@ -47,7 +56,7 @@ public final class HordeChunkTickets {
         state.activeCounts.keySet().forEach(chunk -> acquireOrRenew(level, chunk));
         state.pendingRecovery.removeIf(chunk -> isEntityTicking(level, chunk));
         if (!state.pendingRecovery.isEmpty()) {
-            return false;
+            return new TickResult(false, 0);
         }
         members = loadedMembers(level);
 
@@ -55,7 +64,7 @@ public final class HordeChunkTickets {
                 new HordePlanner.TicketSnapshot(players, memberRefs(members), state.activeCounts));
         plan.acquireOrRenew().forEach(chunk -> acquireOrRenew(level, chunk));
         assignGroups(members, plan.groupAssignments());
-        removeMembers(members, plan.removeMemberIds(), OFFLINE_CLEANUP_LIMIT);
+        int removed = removeMembers(members, plan.removeMemberIds(), HordeDaytimeCleanup.REMOVALS_PER_TICK);
 
         Map<HordePlanner.ChunkRef, Integer> nextCounts = new HashMap<>(plan.desiredCounts());
         loadedMembers(level).stream()
@@ -70,7 +79,12 @@ public final class HordeChunkTickets {
         state.activeCounts.clear();
         state.activeCounts.putAll(nextCounts);
         recountLoadedOccupancy(level, data, loadedMembers(level));
-        return true;
+        return new TickResult(true, removed);
+    }
+
+    static boolean hasActive(ServerLevel level, HordePlanner.ChunkRef chunk) {
+        State state = STATES.get(level);
+        return state != null && state.activeCounts.containsKey(chunk);
     }
 
     static boolean beforeSpawn(ServerLevel level, Zombie zombie) {
@@ -115,6 +129,38 @@ public final class HordeChunkTickets {
             acquireOrRenew(level, target);
         }
     }
+
+    static void releaseMember(ServerLevel level, Zombie zombie) {
+        if (!HordeIdentity.isHordeMember(zombie)) {
+            return;
+        }
+        HordePlanner.ChunkRef chunk = chunk(zombie);
+        State state = STATES.get(level);
+        if (state != null) {
+            Integer count = state.activeCounts.get(chunk);
+            if (count != null) {
+                if (count <= 1) {
+                    state.activeCounts.remove(chunk);
+                    state.pendingRecovery.remove(chunk);
+                    release(level, chunk);
+                } else {
+                    state.activeCounts.put(chunk, count - 1);
+                }
+            }
+        }
+        HordeChunkData data = HordeChunkData.get(level);
+        Map<HordePlanner.ChunkRef, Integer> occupancy = new HashMap<>(data.occupancy());
+        Integer occupancyCount = occupancy.get(chunk);
+        if (occupancyCount != null) {
+            if (occupancyCount <= 1) {
+                occupancy.remove(chunk);
+            } else {
+                occupancy.put(chunk, occupancyCount - 1);
+            }
+            data.setOccupancy(occupancy);
+        }
+    }
+
     public static void onLevelUnload(ServerLevel level) {
         State state = STATES.remove(level);
         if (state != null) {
@@ -153,9 +199,9 @@ public final class HordeChunkTickets {
         }
     }
 
-    private static void removeMembers(List<Zombie> members, List<String> removeIds, int limit) {
+    private static int removeMembers(List<Zombie> members, List<String> removeIds, int limit) {
         if (removeIds.isEmpty()) {
-            return;
+            return 0;
         }
         Set<String> remaining = new HashSet<>(removeIds);
         int removed = 0;
@@ -164,10 +210,12 @@ public final class HordeChunkTickets {
                 break;
             }
             if (remaining.remove(zombie.getUUID().toString())) {
+                HordeNavigation.release(zombie);
                 zombie.discard();
                 removed++;
             }
         }
+        return removed;
     }
 
     private static void recountLoadedOccupancy(ServerLevel level, HordeChunkData data, List<Zombie> members) {
@@ -209,6 +257,9 @@ public final class HordeChunkTickets {
         BlockPos center = new ChunkPos(chunk.x(), chunk.z()).getMiddleBlockPosition(level.getMinBuildHeight());
         return level.getChunkSource().getChunkNow(chunk.x(), chunk.z()) != null
                 && level.isPositionEntityTicking(center);
+    }
+
+    record TickResult(boolean ready, int removed) {
     }
 
     private static boolean withinRange(ServerLevel level, double x, double y, double z) {
