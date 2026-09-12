@@ -237,20 +237,20 @@ public final class HordeGameTests {
         BlockPos destination = helper.absolutePos(new BlockPos(4, 2, 2));
         helper.setBlock(obstacle, Blocks.BEDROCK);
         helper.assertTrue(
-                HordeBlockBreaking.start(helper.getLevel(), zombie, destination, null).digging() == null,
+                HordeBlockBreaking.start(helper.getLevel(), zombie, destination).digging() == null,
                 "unbreakable blocks should stay intact");
 
         helper.setBlock(obstacle, Blocks.DIRT);
         HordeBlockBreaking.StartResult denied;
         helper.getLevel().getGameRules().getRule(GameRules.RULE_MOBGRIEFING).set(false, helper.getLevel().getServer());
         try {
-            denied = HordeBlockBreaking.start(helper.getLevel(), zombie, destination, null);
+            denied = HordeBlockBreaking.start(helper.getLevel(), zombie, destination);
         } finally {
             helper.getLevel().getGameRules().getRule(GameRules.RULE_MOBGRIEFING).set(true, helper.getLevel().getServer());
         }
         helper.assertTrue(denied.deniedPos() != null, "mobGriefing should deny digging");
 
-        HordeBlockBreaking.StartResult start = HordeBlockBreaking.start(helper.getLevel(), zombie, destination, null);
+        HordeBlockBreaking.StartResult start = HordeBlockBreaking.start(helper.getLevel(), zombie, destination);
         helper.assertTrue(start.digging() != null, "adjacent dirt should start a digging point");
         ServerPlayer player = HordeBlockBreakingAccess.player(helper.getLevel());
         helper.assertTrue(
@@ -259,7 +259,10 @@ public final class HordeGameTests {
         helper.assertTrue(player.gameMode.isSurvival(), "digging should use survival mode");
         helper.assertTrue(player.getMainHandItem().isEmpty(), "digging should use an empty hand");
 
-        helper.onEachTick(() -> HordeBlockBreaking.tick(helper.getLevel(), zombie, start.digging()));
+        helper.onEachTick(() -> {
+            HordeBlockBreaking.tick(helper.getLevel(), zombie, start.digging());
+            HordeBlockBreaking.onServerTick(helper.getLevel().getServer());
+        });
         helper.succeedWhen(() -> {
             helper.assertBlockPresent(Blocks.AIR, obstacle);
             helper.assertTrue(

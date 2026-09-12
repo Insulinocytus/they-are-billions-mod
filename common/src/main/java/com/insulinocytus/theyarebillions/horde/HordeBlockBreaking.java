@@ -1,7 +1,14 @@
 package com.insulinocytus.theyarebillions.horde;
 
+import java.util.HashMap;
+import java.util.IdentityHashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.function.Predicate;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundSource;
@@ -12,32 +19,59 @@ import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.BooleanOp;
-import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.CollisionContext;
+import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
 final class HordeBlockBreaking {
     private static final double STEP_DISTANCE = 0.6;
+    private static final Map<ServerLevel, LevelDigging> LEVELS = new IdentityHashMap<>();
+    private static final HordeDiggingCoordinator<SiteKey> COORDINATOR = new HordeDiggingCoordinator<>();
 
     private HordeBlockBreaking() {
     }
 
-    static StartResult start(ServerLevel level, Zombie zombie, BlockPos nextStep, BlockPos deniedPos) {
-        Candidate candidate = blockingBlock(level, zombie, nextStep);
+    static void setActiveSiteLimit(int limit) {
+        COORDINATOR.setLimit(limit);
+    }
+
+    static void onServerTick(MinecraftServer server) {
+        COORDINATOR.tick(server.getTickCount());
+        for (Map.Entry<ServerLevel, LevelDigging> entry : LEVELS.entrySet()) {
+            ServerLevel level = entry.getKey();
+            if (level.getServer() == server) {
+                advanceRuntimes(level, entry.getValue());
+            }
+        }
+    }
+
+    static void onLevelUnload(ServerLevel level) {
+        COORDINATOR.removeMatching(key -> key.dimension().equals(level.dimension()));
+        LEVELS.remove(level);
+    }
+
+    static StartResult start(ServerLevel level, Zombie zombie, BlockPos nextStep) {
+        LevelDigging digging = level(level);
+        long tick = level.getServer().getTickCount();
+        Candidate candidate = blockingBlock(
+                level, zombie, nextStep, pos -> COORDINATOR.isDenied(key(level, pos), tick));
         if (candidate == null) {
             return StartResult.NONE;
         }
-        if (candidate.pos().equals(deniedPos)) {
-            return StartResult.NONE;
-        }
 
+        if (!level.getGameRules().getBoolean(GameRules.RULE_MOBGRIEFING)) {
+            return new StartResult(null, candidate.pos());
+        }
         ServerPlayer player = prepareActionPlayer(level, zombie);
         if (!canBreak(level, player, candidate.pos())) {
+            COORDINATOR.deny(key(level, candidate.pos()), tick);
             return new StartResult(null, candidate.pos());
         }
 
@@ -49,42 +83,72 @@ final class HordeBlockBreaking {
         }
         progressPerTick = Math.min(1.0F, progressPerTick);
 
-        player = prepareActionPlayer(level, zombie);
-        if (!HordeBlockBreakingAccess.start(
-                level, zombie, player, candidate.pos(), candidate.face())) {
-            return new StartResult(null, candidate.pos());
+        if (!COORDINATOR.request(
+                key(level, candidate.pos()),
+                zombie.getId(),
+                nearestValidPlayerDistanceSquared(level, candidate.pos()),
+                progressPerTick,
+                tick)) {
+            return StartResult.NONE;
         }
 
+        SiteRuntime runtime = digging.runtimes.get(candidate.pos());
+        if (runtime == null) {
+            runtime = new SiteRuntime(candidate.pos(), state, candidate.face(), zombie.getId());
+            digging.runtimes.put(candidate.pos(), runtime);
+        }
         zombie.getNavigation().stop();
-        return new StartResult(new Digging(candidate.pos(), state, progressPerTick, zombie), null);
+        return new StartResult(new Digging(candidate.pos(), progressPerTick), null);
     }
 
     static TickResult tick(ServerLevel level, Zombie zombie, Digging digging) {
-        if (digging.finished) {
-            return digging.result;
+        LevelDigging levelDigging = LEVELS.get(level);
+        if (levelDigging == null || !COORDINATOR.contains(key(level, digging.pos))) {
+            return TickResult.COMPLETE;
         }
-        if (!level.getBlockState(digging.pos).equals(digging.state)) {
-            finish(level, digging, TickResult.COMPLETE);
+        SiteRuntime runtime = levelDigging.runtimes.get(digging.pos);
+        long tick = level.getServer().getTickCount();
+        if (runtime == null) {
+            COORDINATOR.release(key(level, digging.pos), zombie.getId(), tick);
+            return TickResult.COMPLETE;
+        }
+        if (!level.getBlockState(digging.pos).equals(runtime.state)) {
+            COORDINATOR.complete(key(level, digging.pos));
+            clearCrack(level, runtime);
+            levelDigging.runtimes.remove(digging.pos);
             return TickResult.COMPLETE;
         }
         if (!isAdjacent(zombie, digging.pos)) {
-            finish(level, digging, TickResult.COMPLETE);
+            COORDINATOR.release(key(level, digging.pos), zombie.getId(), tick);
             return TickResult.COMPLETE;
         }
         if (!level.getGameRules().getBoolean(GameRules.RULE_MOBGRIEFING)) {
-            finish(level, digging, TickResult.DENIED);
+            COORDINATOR.deny(key(level, digging.pos), tick);
             return TickResult.DENIED;
         }
-
-        long tick = level.getGameTime();
-        if (digging.lastProgressTick != tick) {
-            digging.progress += digging.progressPerTick;
-            digging.lastProgressTick = tick;
+        if (!COORDINATOR.request(
+                key(level, digging.pos),
+                zombie.getId(),
+                nearestValidPlayerDistanceSquared(level, digging.pos),
+                digging.progressPerTick,
+                tick)) {
+            return TickResult.COMPLETE;
+        }
+        if (!COORDINATOR.isActive(key(level, digging.pos))) {
+            return TickResult.ACTIVE;
+        }
+        if (!runtime.started) {
+            ServerPlayer player = prepareActionPlayer(level, zombie);
+            if (!HordeBlockBreakingAccess.start(level, zombie, player, digging.pos, runtime.face)) {
+                COORDINATOR.deny(key(level, digging.pos), tick);
+                return TickResult.DENIED;
+            }
+            runtime.started = true;
         }
         if (tick % 4 == 0) {
             zombie.swing(InteractionHand.MAIN_HAND);
-            if (digging.lastSoundTick != tick) {
-                SoundType sound = HordeBlockBreakingAccess.sound(level, zombie, digging.pos, digging.state);
+            if (runtime.lastSoundTick != tick) {
+                SoundType sound = HordeBlockBreakingAccess.sound(level, zombie, digging.pos, runtime.state);
                 level.playSound(
                         null,
                         digging.pos,
@@ -92,45 +156,76 @@ final class HordeBlockBreaking {
                         SoundSource.BLOCKS,
                         (sound.getVolume() + 1.0F) / 8.0F,
                         sound.getPitch() * 0.5F);
-                digging.lastSoundTick = tick;
+                runtime.lastSoundTick = tick;
             }
         }
-        int stage = Math.min(9, (int) (digging.progress * 10.0F));
-        if (stage != digging.lastStage) {
-            level.destroyBlockProgress(digging.breakerId, digging.pos, stage);
-            digging.lastStage = stage;
+        float progress = COORDINATOR.progress(key(level, digging.pos));
+        int stage = Math.min(9, (int) (progress * 10.0F));
+        if (stage != runtime.lastStage) {
+            level.destroyBlockProgress(runtime.breakerId, digging.pos, stage);
+            runtime.lastStage = stage;
         }
-        if (digging.progress < 1.0F) {
+        if (progress < 1.0F) {
             return TickResult.ACTIVE;
         }
-
         ServerPlayer player = prepareActionPlayer(level, zombie);
         if (!canBreak(level, player, digging.pos)
                 || !HordeBlockBreakingAccess.destroy(level, zombie, digging.pos)
-                || level.getBlockState(digging.pos).equals(digging.state)) {
-            finish(level, digging, TickResult.DENIED);
+                || level.getBlockState(digging.pos).equals(runtime.state)) {
+            COORDINATOR.deny(key(level, digging.pos), tick);
             return TickResult.DENIED;
         }
-
-        level.levelEvent(2001, digging.pos, Block.getId(digging.state));
-        finish(level, digging, TickResult.COMPLETE);
+        level.levelEvent(2001, digging.pos, Block.getId(runtime.state));
+        COORDINATOR.complete(key(level, digging.pos));
+        clearCrack(level, runtime);
+        levelDigging.runtimes.remove(digging.pos);
         return TickResult.COMPLETE;
     }
 
     static void stop(ServerLevel level, Zombie zombie, Digging digging) {
-        finish(level, digging, TickResult.COMPLETE);
+        LevelDigging levelDigging = LEVELS.get(level);
+        if (levelDigging != null) {
+            COORDINATOR.release(key(level, digging.pos), zombie.getId(), level.getServer().getTickCount());
+        }
     }
 
-    private static void finish(ServerLevel level, Digging digging, TickResult result) {
-        if (digging.finished) {
-            return;
+    private static void advanceRuntimes(ServerLevel level, LevelDigging digging) {
+        Iterator<SiteRuntime> iterator = digging.runtimes.values().iterator();
+        while (iterator.hasNext()) {
+            SiteRuntime runtime = iterator.next();
+            if (!COORDINATOR.contains(key(level, runtime.pos))) {
+                clearCrack(level, runtime);
+                iterator.remove();
+            }
         }
-        if (digging.lastStage != -1) {
-            level.destroyBlockProgress(digging.breakerId, digging.pos, -1);
-        }
-        digging.finished = true;
-        digging.result = result;
     }
+
+    private static void clearCrack(ServerLevel level, SiteRuntime runtime) {
+        if (runtime.lastStage != -1) {
+            level.destroyBlockProgress(runtime.breakerId, runtime.pos, -1);
+            runtime.lastStage = -1;
+        }
+    }
+
+    private static LevelDigging level(ServerLevel level) {
+        return LEVELS.computeIfAbsent(level, ignored -> new LevelDigging());
+    }
+
+    private static SiteKey key(ServerLevel level, BlockPos pos) {
+        return new SiteKey(level.dimension(), pos);
+    }
+
+    private static double nearestValidPlayerDistanceSquared(ServerLevel level, BlockPos pos) {
+        double nearest = Double.MAX_VALUE;
+        Vec3 at = Vec3.atCenterOf(pos);
+        for (ServerPlayer player : level.players()) {
+            if (HordeSpawner.isValidPlayer(player)) {
+                nearest = Math.min(nearest, player.distanceToSqr(at));
+            }
+        }
+        return nearest;
+    }
+
     private static ServerPlayer prepareSpeedPlayer(ServerLevel level, Zombie zombie) {
         ServerPlayer player = resetPlayer(level);
         player.moveTo(zombie.getX(), level.getMaxBuildHeight() + 16.0, zombie.getZ(), 0.0F, 0.0F);
@@ -156,6 +251,7 @@ final class HordeBlockBreaking {
         player.setSwimming(false);
         return player;
     }
+
     private static boolean canBreak(ServerLevel level, ServerPlayer player, BlockPos pos) {
         return level.getGameRules().getBoolean(GameRules.RULE_MOBGRIEFING)
                 && level.getWorldBorder().isWithinBounds(pos)
@@ -163,7 +259,8 @@ final class HordeBlockBreaking {
                 && !player.blockActionRestricted(level, pos, GameType.SURVIVAL);
     }
 
-    private static Candidate blockingBlock(ServerLevel level, Zombie zombie, BlockPos nextStep) {
+    private static Candidate blockingBlock(
+            ServerLevel level, Zombie zombie, BlockPos nextStep, Predicate<BlockPos> skip) {
         BlockPos feet = zombie.blockPosition();
         int dx = Integer.compare(nextStep.getX(), feet.getX());
         int dz = Integer.compare(nextStep.getZ(), feet.getZ());
@@ -176,6 +273,9 @@ final class HordeBlockBreaking {
             AABB moved = zombie.getBoundingBox().move(offset[0] * STEP_DISTANCE, 0.0, offset[1] * STEP_DISTANCE);
             for (int y = Mth.floor(moved.minY); y < Mth.ceil(moved.maxY); y++) {
                 BlockPos pos = new BlockPos(feet.getX() + offset[0], y, feet.getZ() + offset[1]);
+                if (skip.test(pos)) {
+                    continue;
+                }
                 BlockState state = level.getBlockState(pos);
                 VoxelShape shape = state.getCollisionShape(level, pos, CollisionContext.of(zombie));
                 if (!shape.isEmpty()
@@ -230,28 +330,45 @@ final class HordeBlockBreaking {
 
     static final class Digging {
         private final BlockPos pos;
-        private final BlockState state;
         private final float progressPerTick;
-        private final int breakerId;
-        private float progress;
-        private int lastStage = -1;
-        private long lastSoundTick = Long.MIN_VALUE;
-        private long lastProgressTick = Long.MIN_VALUE;
-        private boolean finished;
-        private TickResult result = TickResult.ACTIVE;
 
-        private Digging(BlockPos pos, BlockState state, float progressPerTick, Zombie zombie) {
+        private Digging(BlockPos pos, float progressPerTick) {
             this.pos = pos;
-            this.state = state;
             this.progressPerTick = progressPerTick;
-            breakerId = zombie.getId();
         }
 
         BlockPos pos() {
             return pos;
         }
     }
+
     private record Candidate(BlockPos pos, Direction face) {
     }
 
+    private record SiteKey(ResourceKey<Level> dimension, BlockPos pos) {
+        SiteKey {
+            pos = pos.immutable();
+        }
+    }
+
+    private static final class LevelDigging {
+        private final Map<BlockPos, SiteRuntime> runtimes = new HashMap<>();
+    }
+
+    private static final class SiteRuntime {
+        private final BlockPos pos;
+        private final BlockState state;
+        private final Direction face;
+        private final int breakerId;
+        private int lastStage = -1;
+        private long lastSoundTick = Long.MIN_VALUE;
+        private boolean started;
+
+        private SiteRuntime(BlockPos pos, BlockState state, Direction face, int breakerId) {
+            this.pos = pos;
+            this.state = state;
+            this.face = face;
+            this.breakerId = breakerId;
+        }
+    }
 }

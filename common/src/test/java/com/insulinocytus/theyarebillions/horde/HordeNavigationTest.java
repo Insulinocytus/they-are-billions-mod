@@ -27,6 +27,16 @@ class HordeNavigationTest {
     }
 
     @Test
+    void stopsHuntingWhenTheTargetLeavesSimulationRange() {
+        assertEquals(true, HordeNavigation.isHuntTargetValid(true, true, true, true, 160.0 * 160.0));
+        assertEquals(false, HordeNavigation.isHuntTargetValid(true, true, true, true, 160.0 * 160.0 + 1.0));
+        assertEquals(false, HordeNavigation.isHuntTargetValid(false, true, true, true, 1.0));
+        assertEquals(false, HordeNavigation.isHuntTargetValid(true, false, true, true, 1.0));
+        assertEquals(false, HordeNavigation.isHuntTargetValid(true, true, false, true, 1.0));
+        assertEquals(false, HordeNavigation.isHuntTargetValid(true, true, true, false, 1.0));
+    }
+
+    @Test
     void followersShareAnImmutableTemplateButAdvanceIndependentCursors() {
         List<HordeNavigation.Waypoint> source = new ArrayList<>(List.of(
                 new HordeNavigation.Waypoint(0, 64, 0), new HordeNavigation.Waypoint(4, 64, 0)));
