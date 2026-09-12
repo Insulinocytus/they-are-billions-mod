@@ -21,7 +21,9 @@ public final class HordeSimulation {
         if (state == null) {
             return Integer.MAX_VALUE;
         }
-        return scheduled(state.tier, state.tick, zombie.getId()) ? state.tier.collisionNeighborLimit() : 0;
+        return scheduled(state.tier, state.tick, zombie.getId(), intervalMultiplier(zombie))
+                ? state.tier.collisionNeighborLimit()
+                : 0;
     }
 
     public static int alignPathRecalculation(Zombie zombie, int vanillaDelay) {
@@ -29,7 +31,14 @@ public final class HordeSimulation {
             return vanillaDelay;
         }
         State state = state(zombie);
-        return state == null ? vanillaDelay : delayUntilScheduled(state.tier, state.tick, zombie.getId());
+        if (state == null) {
+            return vanillaDelay;
+        }
+        return delayUntilScheduled(state.tier, state.tick, zombie.getId(), intervalMultiplier(zombie));
+    }
+
+    private static int intervalMultiplier(Zombie zombie) {
+        return HordePerformance.simulationIntervalMultiplier(((ServerLevel) zombie.level()).getServer());
     }
 
     static Tier tier(Tier current, double distanceSquared) {
@@ -53,11 +62,20 @@ public final class HordeSimulation {
     }
 
     static boolean scheduled(Tier tier, long tick, int entityId) {
-        return delayUntilScheduled(tier, tick, entityId) == 0;
+        return scheduled(tier, tick, entityId, 1);
+    }
+
+    static boolean scheduled(Tier tier, long tick, int entityId, int intervalMultiplier) {
+        return delayUntilScheduled(tier, tick, entityId, intervalMultiplier) == 0;
     }
 
     static int delayUntilScheduled(Tier tier, long tick, int entityId) {
-        return (int) Math.floorMod((long) entityId - tick, tier.interval);
+        return delayUntilScheduled(tier, tick, entityId, 1);
+    }
+
+    static int delayUntilScheduled(Tier tier, long tick, int entityId, int intervalMultiplier) {
+        int interval = tier == Tier.NEAR ? 1 : tier.interval * Math.max(1, intervalMultiplier);
+        return (int) Math.floorMod((long) entityId - tick, interval);
     }
 
     private static State state(Zombie zombie) {

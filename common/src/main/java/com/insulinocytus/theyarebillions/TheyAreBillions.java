@@ -5,6 +5,7 @@ import com.insulinocytus.theyarebillions.horde.HordeChunkTickets;
 import com.insulinocytus.theyarebillions.horde.HordeNavigation;
 import com.insulinocytus.theyarebillions.horde.HordeDaytimeCleanup;
 import com.insulinocytus.theyarebillions.horde.HordeSpawner;
+import com.insulinocytus.theyarebillions.horde.HordePerformance;
 import com.insulinocytus.theyarebillions.perf.PerfHarness;
 import dev.architectury.event.events.common.LifecycleEvent;
 import net.minecraft.server.MinecraftServer;
@@ -31,9 +32,15 @@ public final class TheyAreBillions {
         PerfHarness.initialize();
     }
 
+    public static void onServerTickStart(MinecraftServer server) {
+        HordePerformance.onTickStart(server);
+        PerfHarness.onTickStart(server);
+    }
+
     public static void onServerTickEnd(MinecraftServer server) {
         HordeSpawner.onServerTick(server);
         HordeNavigation.onServerTick(server);
+        HordePerformance.onTickEnd(server);
         PerfHarness.onTickEnd(server);
     }
 }

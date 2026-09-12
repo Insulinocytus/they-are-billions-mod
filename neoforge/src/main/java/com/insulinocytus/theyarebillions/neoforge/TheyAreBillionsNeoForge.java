@@ -1,7 +1,6 @@
 package com.insulinocytus.theyarebillions.neoforge;
 
 import com.insulinocytus.theyarebillions.TheyAreBillions;
-import com.insulinocytus.theyarebillions.perf.PerfHarness;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
@@ -17,7 +16,7 @@ public final class TheyAreBillionsNeoForge {
                 EventPriority.NORMAL,
                 false,
                 ServerTickEvent.Pre.class,
-                event -> PerfHarness.onTickStart(event.getServer()));
+                event -> TheyAreBillions.onServerTickStart(event.getServer()));
         NeoForge.EVENT_BUS.addListener(
                 EventPriority.NORMAL,
                 false,

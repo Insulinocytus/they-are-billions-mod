@@ -41,6 +41,10 @@ public final class HordePlanner {
     }
 
     public static Plan plan(Snapshot snapshot, DoubleSupplier newDirectionRadians) {
+        return plan(snapshot, newDirectionRadians, MAX_SUCCESSFUL_SPAWNS_PER_TICK);
+    }
+
+    static Plan plan(Snapshot snapshot, DoubleSupplier newDirectionRadians, int spawnLimit) {
         long dayTime = snapshot.dayTime();
         if (!snapshot.overworld()) {
             return Plan.none(observeTime(snapshot.night(), dayTime));
@@ -54,7 +58,7 @@ public final class HordePlanner {
         }
         int desired = desiredCount(snapshot.dayTime(), target);
         int remaining = Math.max(0, desired - snapshot.ordinaryZombieCount());
-        int quota = Math.min(MAX_SUCCESSFUL_SPAWNS_PER_TICK, remaining);
+        int quota = Math.min(Math.clamp(spawnLimit, 0, MAX_SUCCESSFUL_SPAWNS_PER_TICK), remaining);
         if (quota == 0) {
             return new Plan(desired, 0, 0, List.of(), nightState);
         }
