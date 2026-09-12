@@ -1,6 +1,7 @@
 package com.insulinocytus.theyarebillions.horde;
 
 import com.insulinocytus.theyarebillions.HordeChunkTicketAccess;
+import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
@@ -145,8 +146,9 @@ public final class HordeGameTests {
     }
 
     public static void nearbyMeleeAttackStillHits(GameTestHelper helper) {
-        helper.setNight();
         Zombie zombie = spawnHordeMember(helper, new BlockPos(2, 2, 2));
+        zombie.setPersistenceRequired();
+        helper.setBlock(new BlockPos(2, 4, 2), Blocks.STONE);
         nearbyPlayer(helper, zombie.getX() + 2.0, zombie.getY(), zombie.getZ());
         zombie.getAttribute(Attributes.FOLLOW_RANGE).setBaseValue(1.5);
         Villager villager = helper.spawn(EntityType.VILLAGER, helper.relativeVec(zombie.position()).add(1.0, 0.0, 0.0));
@@ -163,6 +165,7 @@ public final class HordeGameTests {
         for (int z = 0; z <= 5; z++) {
             for (int x = 0; x <= 4; x++) {
                 helper.setBlock(new BlockPos(x, 1, z), Blocks.GRASS_BLOCK);
+                helper.setBlock(new BlockPos(x, 4, z), Blocks.STONE);
             }
             for (int y = 2; y <= 3; y++) {
                 helper.setBlock(new BlockPos(1, y, z), Blocks.STONE);
@@ -174,6 +177,7 @@ public final class HordeGameTests {
             helper.setBlock(new BlockPos(4, y, 3), Blocks.STONE);
         }
         Zombie zombie = spawnHordeMember(helper, new BlockPos(2, 2, 1));
+        zombie.setPersistenceRequired();
         nearbyPlayer(helper, zombie.getX(), zombie.getY(), zombie.getZ() + 3.0);
         Villager villager = helper.spawn(EntityType.VILLAGER, new Vec3(2.5, 2.0, 4.5));
         villager.setNoAi(true);
@@ -187,6 +191,8 @@ public final class HordeGameTests {
 
     public static void nearbyPlayerStillGetsPushed(GameTestHelper helper) {
         Zombie zombie = spawnHordeMember(helper, new BlockPos(2, 2, 2));
+        zombie.setPersistenceRequired();
+        helper.setBlock(new BlockPos(2, 4, 2), Blocks.STONE);
         ServerPlayer player = nearbyPlayer(helper, zombie.getX() + 0.1, zombie.getY(), zombie.getZ());
         zombie.setNoAi(true);
         player.setDeltaMovement(Vec3.ZERO);
@@ -206,6 +212,8 @@ public final class HordeGameTests {
 
     public static void hordeDiggingUsesEmptySurvivalFakePlayerDrops(GameTestHelper helper) {
         Zombie zombie = spawnHordeMember(helper, new BlockPos(2, 2, 2));
+        zombie.setPersistenceRequired();
+        helper.setBlock(new BlockPos(2, 4, 2), Blocks.STONE);
         zombie.setCanBreakDoors(true);
         HordeNavigation.tick(zombie);
         helper.assertFalse(zombie.canBreakDoors(), "horde members should not keep vanilla door breaking");
@@ -277,6 +285,33 @@ public final class HordeGameTests {
                 "horde members should use the common 160-block cleanup instead of vanilla despawn");
         helper.succeed();
     }
+    public static void daytimeCleanupRemovesSunlitWithoutDrops(GameTestHelper helper) {
+        prepareGrass(helper);
+        openSky(helper, new BlockPos(2, 2, 2));
+        Zombie zombie = spawnOrdinaryZombie(helper, new BlockPos(2, 2, 2));
+        giveGuaranteedDiamond(zombie);
+        helper.succeedWhen(() -> {
+            helper.assertTrue(zombie.isRemoved(), "vanilla sun-burn should queue silent daytime cleanup");
+            helper.assertEntityNotPresent(EntityType.ITEM);
+            helper.assertEntityNotPresent(EntityType.EXPERIENCE_ORB);
+        });
+    }
+
+    public static void daytimeCleanupReleasesHordeTickets(GameTestHelper helper) {
+        Zombie zombie = spawnHordeMember(helper, new BlockPos(2, 2, 2));
+        HordePlanner.ChunkRef chunk = new HordePlanner.ChunkRef(zombie.chunkPosition().x, zombie.chunkPosition().z);
+        helper.assertTrue(
+                HordeChunkData.get(helper.getLevel()).occupancy().getOrDefault(chunk, 0) > 0,
+                "horde member should occupy a chunk ticket");
+        helper.assertTrue(HordeDaytimeCleanup.queueSunlit(zombie), "horde member can be sunlit");
+        HordeDaytimeCleanup.tick(helper.getLevel(), List.of(), HordeDaytimeCleanup.REMOVALS_PER_TICK);
+        helper.assertTrue(zombie.isRemoved(), "sunlit horde member should be discarded");
+        helper.assertTrue(
+                !HordeChunkData.get(helper.getLevel()).occupancy().containsKey(chunk),
+                "cleanup should release occupancy and planning state");
+        helper.succeed();
+    }
+
 
     private static Zombie spawnHordeMember(GameTestHelper helper, BlockPos relativeFeet) {
         helper.getLevel().getServer().setDifficulty(Difficulty.NORMAL, true);
@@ -298,6 +333,26 @@ public final class HordeGameTests {
         helper.setBlock(new BlockPos(2, 1, 2), Blocks.GRASS_BLOCK);
         helper.setBlock(new BlockPos(1, 1, 2), Blocks.GRASS_BLOCK);
     }
+
+
+
+    private static void openSky(GameTestHelper helper, BlockPos relativeFeet) {
+        BlockPos feet = helper.absolutePos(relativeFeet);
+        int top = helper.getLevel().getMaxBuildHeight();
+        for (int y = feet.getY() + 2; y < top; y++) {
+            helper.getLevel().setBlock(new BlockPos(feet.getX(), y, feet.getZ()), Blocks.AIR.defaultBlockState(), 3);
+        }
+    }
+    private static Zombie spawnOrdinaryZombie(GameTestHelper helper, BlockPos relativeFeet) {
+        helper.getLevel().getServer().setDifficulty(Difficulty.NORMAL, true);
+        Zombie zombie = EntityType.ZOMBIE.create(helper.getLevel());
+        helper.assertTrue(zombie != null, "zombie should exist");
+        BlockPos feet = helper.absolutePos(relativeFeet);
+        zombie.moveTo(feet.getX() + 0.5, feet.getY(), feet.getZ() + 0.5, 0.0F, 0.0F);
+        helper.assertTrue(helper.getLevel().addFreshEntity(zombie), "ordinary zombie should spawn");
+        return zombie;
+    }
+
 
     private static void giveGuaranteedDiamond(Zombie zombie) {
         zombie.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.DIAMOND));

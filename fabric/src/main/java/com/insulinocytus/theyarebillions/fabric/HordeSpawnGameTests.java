@@ -69,4 +69,14 @@ public final class HordeSpawnGameTests {
     public void hordeDiggingUsesEmptySurvivalFakePlayerDrops(GameTestHelper helper) {
         HordeGameTests.hordeDiggingUsesEmptySurvivalFakePlayerDrops(helper);
     }
+
+    @GameTest(template = HordeGameTests.EMPTY_TEMPLATE, timeoutTicks = 400)
+    public void daytimeCleanupRemovesSunlitWithoutDrops(GameTestHelper helper) {
+        HordeGameTests.daytimeCleanupRemovesSunlitWithoutDrops(helper);
+    }
+
+    @GameTest(template = HordeGameTests.EMPTY_TEMPLATE)
+    public void daytimeCleanupReleasesHordeTickets(GameTestHelper helper) {
+        HordeGameTests.daytimeCleanupReleasesHordeTickets(helper);
+    }
 }
