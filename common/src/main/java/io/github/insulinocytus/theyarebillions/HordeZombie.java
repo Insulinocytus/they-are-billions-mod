@@ -1,0 +1,90 @@
+package io.github.insulinocytus.theyarebillions;
+
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.DifficultyInstance;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.SpawnGroupData;
+import net.minecraft.world.entity.monster.Zombie;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.ServerLevelAccessor;
+import org.jetbrains.annotations.Nullable;
+
+/**
+ * A summonable zombie that reuses the vanilla adult zombie model, attributes, sounds and animations
+ * while giving up every zombie behaviour that would create content or convert entities: random
+ * equipment, reinforcements, riding, item pickup, door breaking, drowned conversion, villager
+ * conversion and death loot. {@code createWitherRose} is suppressed too, because the vanilla death
+ * path drops that item outside {@code dropAllDeathLoot}.
+ */
+public final class HordeZombie extends Zombie {
+    public HordeZombie(EntityType<? extends Zombie> entityType, Level level) {
+        super(entityType, level);
+    }
+
+    @Override
+    protected boolean supportsBreakDoorGoal() {
+        return false;
+    }
+
+    @Override
+    public boolean isBaby() {
+        return false;
+    }
+
+    @Override
+    public void setBaby(boolean baby) {
+    }
+
+    @Override
+    protected boolean convertsInWater() {
+        return false;
+    }
+
+    @Override
+    public boolean isUnderWaterConverting() {
+        return false;
+    }
+
+    @Override
+    public boolean canPickUpLoot() {
+        return false;
+    }
+
+    @Override
+    public void setCanPickUpLoot(boolean canPickUpLoot) {
+    }
+
+    @Override
+    public boolean startRiding(Entity vehicle, boolean force) {
+        return false;
+    }
+
+    @Override
+    public boolean killedEntity(ServerLevel serverLevel, LivingEntity livingEntity) {
+        return true;
+    }
+
+    /**
+     * Skips every spawn-time randomisation the vanilla zombie performs: baby roll, chicken jockey,
+     * door breaking, random equipment and reinforcements. Nothing in this class calls
+     * {@code super}, so {@code populateDefaultEquipmentSlots} is unreachable for a horde zombie.
+     */
+    @Override
+    public SpawnGroupData finalizeSpawn(
+        ServerLevelAccessor level, DifficultyInstance difficulty, MobSpawnType spawnType, @Nullable SpawnGroupData spawnGroupData
+    ) {
+        return spawnGroupData;
+    }
+
+    @Override
+    protected void dropAllDeathLoot(ServerLevel serverLevel, DamageSource damageSource) {
+    }
+
+    @Override
+    protected void createWitherRose(@Nullable LivingEntity killer) {
+    }
+}
