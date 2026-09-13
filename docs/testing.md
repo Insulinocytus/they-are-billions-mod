@@ -12,7 +12,7 @@ Draft PR 不运行检查；Ready PR 后续每次 push 会重新验证最新提�
 
 三个检查均使用 Gradle 依赖缓存。Unit Tests 最多运行 10 分钟；每个平台的 Validation 最多运行 15 分钟，其中 Client Startup Smoke Tests 最多运行 3 分钟。Fabric 与 NeoForge 即使其中一个失败，另一个也会继续完成。
 
-性能基准不在共享 CI 中判定通过或失败；它使用固定硬件和 `docs/performance.md` 中的可复现世界手动运行。`generatePerfBaselines`、`runIdleServerBaseline` 和 `runIdleClientBaseline` 只在开发者机器上执行。Unit Tests 仍验证场景文件与 MSPT/P95 计算。
+性能基准不在共享 CI 中判定通过或失败；它使用维护者参考环境和 `docs/performance.md` 中的可复现世界手动运行。`generatePerfBaselines`、`runIdleServerBaseline` 和 `runIdleClientBaseline` 只在开发者机器上执行。Unit Tests 仍验证场景文件与 MSPT/P95 计算。
 
 ## Unit Tests
 
