@@ -56,20 +56,12 @@ jobs:
       - name: Unit Tests
         run: ./gradlew :common:test --no-daemon --console=plain
 
-  platform-validation:
-    name: ${{ matrix.name }} Validation
+  fabric-validation:
+    name: Fabric Validation
     needs: changes
     if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.tests == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Fabric
-            project: fabric
-          - name: NeoForge
-            project: neoforge
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
@@ -78,15 +70,62 @@ jobs:
           java-version: "21"
           cache: gradle
       - name: Platform Build and JAR Packaging Checks
-        run: ./gradlew :${{ matrix.project }}:build :${{ matrix.project }}:verifyJarPackaging --no-daemon --console=plain
+        run: ./gradlew :fabric:build :fabric:verifyJarPackaging --no-daemon --console=plain
       - name: Server Integration Tests
-        run: ./gradlew :${{ matrix.project }}:runGameTestServer --no-daemon --console=plain
+        run: ./gradlew :fabric:runGameTestServer --no-daemon --console=plain
       - name: Client Startup Smoke Tests
         timeout-minutes: 3
         shell: bash
         env:
-          CLIENT_TASK: :${{ matrix.project }}:runClient
-          PLATFORM: ${{ matrix.project }}
+          CLIENT_TASK: :fabric:runClient
+          PLATFORM: fabric
+        run: |
+          version=$(grep -E '^mod_version=' gradle.properties | cut -d= -f2)
+          log="${PLATFORM}-client.log"
+          xvfb-run --auto-servernum ./gradlew "${CLIENT_TASK}" --no-daemon --console=plain >"${log}" 2>&1 &
+          pid=$!
+
+          for _ in $(seq 1 120); do
+            if grep -Fq "They Are Billions ${version} loaded" "${log}"; then
+              kill "${pid}"
+              wait "${pid}" || true
+              exit 0
+            fi
+            if ! kill -0 "${pid}" 2>/dev/null; then
+              cat "${log}"
+              exit 1
+            fi
+            sleep 1
+          done
+
+          kill "${pid}" 2>/dev/null || true
+          wait "${pid}" || true
+          cat "${log}"
+          exit 1
+
+  neoforge-validation:
+    name: NeoForge Validation
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.tests == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+      - name: Platform Build and JAR Packaging Checks
+        run: ./gradlew :neoforge:build :neoforge:verifyJarPackaging --no-daemon --console=plain
+      - name: Server Integration Tests
+        run: ./gradlew :neoforge:runGameTestServer --no-daemon --console=plain
+      - name: Client Startup Smoke Tests
+        timeout-minutes: 3
+        shell: bash
+        env:
+          CLIENT_TASK: :neoforge:runClient
+          PLATFORM: neoforge
         run: |
           version=$(grep -E '^mod_version=' gradle.properties | cut -d= -f2)
           log="${PLATFORM}-client.log"
