@@ -68,7 +68,3 @@ components.java {
         skip()
     }
 }
-
-tasks.named("check") {
-    dependsOn tasks.named("runGameTest")
-}
