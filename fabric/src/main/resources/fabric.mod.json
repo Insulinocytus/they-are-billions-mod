@@ -12,6 +12,9 @@
   "entrypoints": {
     "main": [
       "io.github.insulinocytus.theyarebillions.fabric.TheyAreBillionsFabric"
+    ],
+    "fabric-gametest": [
+      "io.github.insulinocytus.theyarebillions.fabric.TheyAreBillionsFabricGameTests"
     ]
   },
   "depends": {

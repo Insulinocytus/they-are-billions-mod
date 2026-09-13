@@ -1,0 +1,14 @@
+{
+  "type": "minecraft:block",
+  "pools": [
+    {
+      "rolls": 1.0,
+      "entries": [
+        {
+          "type": "minecraft:item",
+          "name": "they_are_billions:brain_in_a_jar"
+        }
+      ]
+    }
+  ]
+}
