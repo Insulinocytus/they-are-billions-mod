@@ -1,0 +1,104 @@
+name: Pull Request CI
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.filter.outputs.build }}
+    steps:
+      - name: Filter build changes
+        id: filter
+        uses: dorny/paths-filter@v4
+        with:
+          filters: |
+            build:
+              - 'build.gradle'
+              - 'settings.gradle'
+              - 'gradle.properties'
+              - 'gradlew'
+              - 'gradlew.bat'
+              - 'gradle/**'
+              - 'common/**'
+              - 'fabric/**'
+              - 'neoforge/**'
+              - '.github/workflows/ci.yml'
+
+  verify:
+    name: ${{ matrix.name }}
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Build
+            task: build
+          - name: Fabric GameTest
+            task: :fabric:runGameTest
+          - name: NeoForge GameTest
+            task: :neoforge:runGameTestServer
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Run ${{ matrix.name }}
+        run: ./gradlew ${{ matrix.task }} --no-parallel
+
+  required-ci:
+    name: Required CI
+    needs: [changes, verify]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check required jobs
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          BUILD_CHANGED: ${{ needs.changes.outputs.build }}
+          VERIFY_RESULT: ${{ needs.verify.result }}
+        run: |
+          if [ "$CHANGES_RESULT" != "success" ]; then
+            echo "Change detection failed: $CHANGES_RESULT"
+            exit 1
+          fi
+
+          case "$BUILD_CHANGED" in
+            true)
+              if [ "$VERIFY_RESULT" != "success" ]; then
+                echo "Build verification failed: $VERIFY_RESULT"
+                exit 1
+              fi
+              ;;
+            false)
+              if [ "$VERIFY_RESULT" != "skipped" ]; then
+                echo "Build verification should be skipped: $VERIFY_RESULT"
+                exit 1
+              fi
+              ;;
+            *)
+              echo "Unexpected build filter result: $BUILD_CHANGED"
+              exit 1
+              ;;
+          esac
