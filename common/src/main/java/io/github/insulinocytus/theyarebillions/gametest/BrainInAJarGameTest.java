@@ -33,7 +33,7 @@ public final class BrainInAJarGameTest {
         helper.assertTrue(BuiltInRegistries.ITEM.getKey(item).equals(id), "Brain in a Jar item was not registered");
         helper.assertTrue(item instanceof BlockItem blockItem && blockItem.getBlock() == block, "Brain in a Jar item cannot place its block");
 
-        var tab = TheyAreBillions.TAB.get();
+        var tab = TheyAreBillions.CREATIVE_TAB.get();
         tab.buildContents(new CreativeModeTab.ItemDisplayParameters(FeatureFlags.VANILLA_SET, false, helper.getLevel().registryAccess()));
         helper.assertTrue(tab.getIconItem().is(item), "Brain in a Jar is not the creative tab icon");
         helper.assertTrue(

@@ -20,7 +20,7 @@ public final class TheyAreBillions {
     public static final RegistrySupplier<Item> BRAIN_IN_A_JAR_ITEM = ITEMS.register(
         "brain_in_a_jar", () -> new BlockItem(BRAIN_IN_A_JAR_BLOCK.get(), new Item.Properties())
     );
-    public static final RegistrySupplier<CreativeModeTab> TAB = TABS.register(
+    public static final RegistrySupplier<CreativeModeTab> CREATIVE_TAB = TABS.register(
         "main",
         () -> CreativeTabRegistry.create(builder -> builder
             .title(Component.translatable("itemGroup." + MOD_ID))

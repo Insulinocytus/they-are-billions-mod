@@ -13,6 +13,9 @@
     "main": [
       "io.github.insulinocytus.theyarebillions.fabric.TheyAreBillionsFabric"
     ],
+    "client": [
+      "io.github.insulinocytus.theyarebillions.fabric.TheyAreBillionsFabricClient"
+    ],
     "fabric-gametest": [
       "io.github.insulinocytus.theyarebillions.fabric.TheyAreBillionsFabricGameTests"
     ]
