@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "they_are_billions",
+  "version": "${version}",
+  "name": "They Are Billions",
+  "description": "以大规模夜间尸潮为核心的 Minecraft 模组。",
+  "authors": [
+    "Insulinocytus"
+  ],
+  "license": "All Rights Reserved",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "io.github.insulinocytus.theyarebillions.fabric.TheyAreBillionsFabric"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.5",
+    "minecraft": "~1.21.1",
+    "java": ">=21",
+    "architectury": ">=13.0.11",
+    "fabric-api": "*"
+  }
+}

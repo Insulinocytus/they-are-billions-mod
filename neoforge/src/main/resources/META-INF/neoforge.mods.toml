@@ -1,0 +1,33 @@
+modLoader="javafml"
+loaderVersion="[1,)"
+license="All Rights Reserved"
+
+[[mods]]
+modId="they_are_billions"
+version="${version}"
+displayName="They Are Billions"
+authors="Insulinocytus"
+description='''
+以大规模夜间尸潮为核心的 Minecraft 模组。
+'''
+
+[[dependencies.they_are_billions]]
+modId="neoforge"
+type="required"
+versionRange="[21.1.249,)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.they_are_billions]]
+modId="minecraft"
+type="required"
+versionRange="[1.21.1]"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.they_are_billions]]
+modId="architectury"
+type="required"
+versionRange="[13.0.11,)"
+ordering="NONE"
+side="BOTH"
