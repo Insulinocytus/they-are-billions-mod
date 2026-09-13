@@ -7,6 +7,18 @@ architectury {
     neoForge()
 }
 
+loom {
+    runs {
+        gameTestServer {
+            server()
+            name "NeoForge GameTest Server"
+            vmArg "-Dneoforge.gameTestServer=true"
+            vmArg "-Dneoforge.enabledGameTestNamespaces=they_are_billions"
+            runDir "build/run/gameTestServer"
+        }
+    }
+}
+
 configurations {
     common
     shadowCommon // Don't use shadow from the shadow plugin since it *excludes* files.

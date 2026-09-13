@@ -1,0 +1,17 @@
+package io.github.insulinocytus.theyarebillions.neoforge;
+
+import io.github.insulinocytus.theyarebillions.TheyAreBillions;
+import io.github.insulinocytus.theyarebillions.gametest.BrainInAJarGameTest;
+import net.minecraft.gametest.framework.GameTest;
+import net.minecraft.gametest.framework.GameTestHelper;
+import net.neoforged.neoforge.gametest.GameTestHolder;
+import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
+
+@GameTestHolder(TheyAreBillions.MOD_ID)
+@PrefixGameTestTemplate(false)
+public final class TheyAreBillionsNeoForgeGameTests {
+    @GameTest(template = "empty")
+    public static void brainInAJar(GameTestHelper helper) {
+        BrainInAJarGameTest.verify(helper);
+    }
+}
