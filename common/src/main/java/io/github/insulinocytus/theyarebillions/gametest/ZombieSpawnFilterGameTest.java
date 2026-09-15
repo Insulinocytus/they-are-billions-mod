@@ -1,5 +1,7 @@
 package io.github.insulinocytus.theyarebillions.gametest;
 
+import io.github.insulinocytus.theyarebillions.TheyAreBillions;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.entity.EntityType;
@@ -19,6 +21,9 @@ public final class ZombieSpawnFilterGameTest {
         EntityType.ZOMBIE.spawn(level, spawnPos, MobSpawnType.SPAWNER);
         EntityType.ZOMBIE.spawn(level, spawnPos, MobSpawnType.TRIAL_SPAWNER);
         helper.assertEntityNotPresent(EntityType.ZOMBIE);
+
+        TheyAreBillions.HORDE_ZOMBIE_ENTITY_TYPE.get().spawn(level, spawnPos, MobSpawnType.NATURAL);
+        helper.assertEntityPresent(TheyAreBillions.HORDE_ZOMBIE_ENTITY_TYPE.get());
 
         EntityType.ZOMBIE.spawn(level, spawnPos, MobSpawnType.SPAWN_EGG);
         EntityType.ZOMBIE.spawn(level, spawnPos, MobSpawnType.COMMAND);

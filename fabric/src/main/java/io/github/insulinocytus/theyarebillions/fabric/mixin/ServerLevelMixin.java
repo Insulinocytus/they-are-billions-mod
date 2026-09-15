@@ -1,7 +1,6 @@
 package io.github.insulinocytus.theyarebillions.fabric.mixin;
 
 import io.github.insulinocytus.theyarebillions.fabric.ZombieSpawnBlockFlag;
-
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import org.spongepowered.asm.mixin.Mixin;
