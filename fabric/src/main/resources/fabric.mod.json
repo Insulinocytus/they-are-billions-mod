@@ -20,6 +20,9 @@
       "io.github.insulinocytus.theyarebillions.fabric.TheyAreBillionsFabricGameTests"
     ]
   },
+  "mixins": [
+    "they_are_billions.mixins.json"
+  ],
   "depends": {
     "fabricloader": ">=0.19.5",
     "minecraft": "~1.21.1",
