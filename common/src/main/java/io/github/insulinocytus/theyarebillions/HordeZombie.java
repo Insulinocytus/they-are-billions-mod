@@ -1,5 +1,7 @@
 package io.github.insulinocytus.theyarebillions;
 
+import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.DifficultyInstance;
 import net.minecraft.world.damagesource.DamageSource;
@@ -21,8 +23,33 @@ import org.jetbrains.annotations.Nullable;
  * path drops that item outside {@code dropAllDeathLoot}.
  */
 public final class HordeZombie extends Zombie {
+    private static final String BRAIN_POS_TAG = "BrainPos";
+
+    private @Nullable BlockPos brainPos;
     public HordeZombie(EntityType<? extends Zombie> entityType, Level level) {
         super(entityType, level);
+    }
+
+    void setBrainPos(BlockPos brainPos) {
+        this.brainPos = brainPos.immutable();
+    }
+
+    @Nullable BlockPos getBrainPos() {
+        return this.brainPos;
+    }
+
+    @Override
+    public void addAdditionalSaveData(CompoundTag tag) {
+        super.addAdditionalSaveData(tag);
+        if (this.brainPos != null) {
+            tag.putLong(BRAIN_POS_TAG, this.brainPos.asLong());
+        }
+    }
+
+    @Override
+    public void readAdditionalSaveData(CompoundTag tag) {
+        super.readAdditionalSaveData(tag);
+        this.brainPos = tag.contains(BRAIN_POS_TAG) ? BlockPos.of(tag.getLong(BRAIN_POS_TAG)) : null;
     }
 
     @Override

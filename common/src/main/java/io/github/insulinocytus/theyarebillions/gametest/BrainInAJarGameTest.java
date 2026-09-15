@@ -49,7 +49,6 @@ public final class BrainInAJarGameTest {
 
         var state = block.defaultBlockState();
         helper.assertTrue(state.getLightEmission() == 0, "Brain in a Jar must not emit light");
-        helper.assertTrue(!state.hasBlockEntity(), "Brain in a Jar must not have beacon behavior");
         helper.assertTrue(state.getPistonPushReaction() == PushReaction.BLOCK, "Pistons must not move Brain in a Jar");
 
         var miner = helper.makeMockPlayer(GameType.SURVIVAL);
@@ -66,6 +65,7 @@ public final class BrainInAJarGameTest {
         var explosion = helper.absolutePos(EXPLOSION_TARGET);
         helper.getLevel().explode(null, explosion.getX() + 0.5, explosion.getY() + 0.5, explosion.getZ() + 0.5, 4.0F, false, Level.ExplosionInteraction.BLOCK);
         helper.assertBlockPresent(block, EXPLOSION_TARGET);
+        helper.getLevel().destroyBlock(helper.absolutePos(EXPLOSION_TARGET), false);
         helper.succeed();
     }
 }

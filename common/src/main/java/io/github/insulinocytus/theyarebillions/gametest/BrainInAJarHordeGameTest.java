@@ -1,0 +1,269 @@
+package io.github.insulinocytus.theyarebillions.gametest;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+import io.github.insulinocytus.theyarebillions.HordeZombie;
+import io.github.insulinocytus.theyarebillions.TheyAreBillions;
+import net.minecraft.core.BlockPos;
+import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.Difficulty;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.LightLayer;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
+
+public final class BrainInAJarHordeGameTest {
+    private static final BlockPos REMOTE_BRAIN = new BlockPos(96, 2, 0);
+    private static final int TEST_SIMULATION_DISTANCE = 10;
+    private static final int LIGHT_GRID_STEP = 8;
+    private static final double SECTOR_TANGENT = Math.tan(Math.toRadians(22.5));
+
+    private BrainInAJarHordeGameTest() {
+    }
+
+    public static void verifyEntityTickingRange(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var server = level.getServer();
+        var gameRules = level.getGameRules();
+        boolean originalMobSpawning = gameRules.getBoolean(GameRules.RULE_DOMOBSPAWNING);
+        BlockPos brainPos = helper.absolutePos(REMOTE_BRAIN);
+        var brainChunk = new ChunkPos(brainPos);
+        int originalSimulationDistance = server.getPlayerList().getSimulationDistance();
+        server.getPlayerList().setSimulationDistance(TEST_SIMULATION_DISTANCE);
+        var boundaryChunk = new ChunkPos(brainChunk.x + TEST_SIMULATION_DISTANCE, brainChunk.z);
+        BlockPos boundary = boundaryChunk.getMiddleBlockPosition(brainPos.getY());
+
+        gameRules.getRule(GameRules.RULE_DOMOBSPAWNING).set(false, server);
+        level.setBlockAndUpdate(brainPos, TheyAreBillions.BRAIN_IN_A_JAR_BLOCK.get().defaultBlockState());
+        for (int x = -2; x <= 2; x++) {
+            for (int z = -2; z <= 2; z++) {
+                level.getChunk(boundaryChunk.x + x, boundaryChunk.z + z);
+            }
+        }
+
+        Runnable cleanup = () -> {
+            level.removeBlock(brainPos, false);
+            gameRules.getRule(GameRules.RULE_DOMOBSPAWNING).set(originalMobSpawning, server);
+            server.getPlayerList().setSimulationDistance(originalSimulationDistance);
+        };
+        helper.runAtTickTime(199, cleanup);
+
+        helper.startSequence()
+            .thenWaitUntil(() -> helper.assertTrue(
+                level.isPositionEntityTicking(brainPos) && level.isPositionEntityTicking(boundary),
+                "Brain in a Jar must keep its center and simulation-distance boundary entity ticking"
+            ))
+            .thenExecute(() -> level.destroyBlock(brainPos, false))
+            .thenWaitUntil(() -> helper.assertTrue(
+                !level.isPositionEntityTicking(brainPos) && !level.isPositionEntityTicking(boundary),
+                "Removing Brain in a Jar must release its entity-ticking range"
+            ))
+            .thenExecute(cleanup)
+            .thenSucceed();
+    }
+
+    public static void verifyDirectionalNightHorde(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var server = level.getServer();
+        var gameRules = level.getGameRules();
+        boolean originalMobSpawning = gameRules.getBoolean(GameRules.RULE_DOMOBSPAWNING);
+        Difficulty originalDifficulty = level.getDifficulty();
+        int originalSimulationDistance = server.getPlayerList().getSimulationDistance();
+        BlockPos brainPos = helper.absolutePos(REMOTE_BRAIN);
+        AABB query = new AABB(brainPos).inflate(144.0, 48.0, 144.0);
+        Map<UUID, BlockPos> initialPositions = new LinkedHashMap<>();
+        int[] previousCount = {0};
+
+        server.getPlayerList().setSimulationDistance(TEST_SIMULATION_DISTANCE);
+        level.getChunk(brainPos);
+        prepareSpawnArea(level, brainPos, true);
+        server.setDifficulty(Difficulty.HARD, true);
+        gameRules.getRule(GameRules.RULE_DOMOBSPAWNING).set(true, server);
+        hordeZombies(level, query).forEach(Entity::discard);
+        level.setDayTime(13000L);
+
+        Runnable cleanup = () -> {
+            hordeZombies(level, query).forEach(Entity::discard);
+            level.removeBlock(brainPos, false);
+            clearSpawnArea(level, brainPos, true);
+            gameRules.getRule(GameRules.RULE_DOMOBSPAWNING).set(originalMobSpawning, server);
+            server.setDifficulty(originalDifficulty, true);
+            server.getPlayerList().setSimulationDistance(originalSimulationDistance);
+        };
+        helper.runAtTickTime(299, cleanup);
+        helper.onEachTick(() -> {
+            List<HordeZombie> zombies = hordeZombies(level, query);
+            assertWithCleanup(
+                helper,
+                cleanup,
+                zombies.size() <= previousCount[0] + 1,
+                "A Brain in a Jar must add at most one horde zombie per tick"
+            );
+            previousCount[0] = zombies.size();
+            zombies.forEach(zombie -> initialPositions.putIfAbsent(zombie.getUUID(), zombie.blockPosition()));
+        });
+
+        helper.startSequence()
+            .thenIdle(10)
+            .thenExecute(() -> assertWithCleanup(
+                helper, cleanup, hordeZombies(level, query).isEmpty(), "Night without a Brain must not create a horde"
+            ))
+            .thenExecute(() -> {
+                level.setDayTime(1000L);
+                level.setBlockAndUpdate(brainPos, TheyAreBillions.BRAIN_IN_A_JAR_BLOCK.get().defaultBlockState());
+            })
+            .thenIdle(10)
+            .thenExecute(() -> assertWithCleanup(
+                helper, cleanup, hordeZombies(level, query).isEmpty(), "A daytime Brain must not create a horde"
+            ))
+            .thenExecute(() -> level.setDayTime(12999L))
+            .thenWaitUntil(() -> {
+                helper.assertTrue(initialPositions.size() >= 32, "The nighttime Brain did not create 32 horde zombies");
+                assertDirectionalPositions(helper, level, brainPos, initialPositions.values());
+            })
+            .thenExecute(cleanup)
+            .thenSucceed();
+    }
+
+    public static void verifyCapacityAndGates(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var server = level.getServer();
+        var gameRules = level.getGameRules();
+        boolean originalMobSpawning = gameRules.getBoolean(GameRules.RULE_DOMOBSPAWNING);
+        Difficulty originalDifficulty = level.getDifficulty();
+        int originalSimulationDistance = server.getPlayerList().getSimulationDistance();
+        BlockPos brainPos = helper.absolutePos(REMOTE_BRAIN);
+        AABB query = new AABB(brainPos).inflate(160.0, 48.0, 160.0);
+        int[] previousCount = {0};
+
+        server.getPlayerList().setSimulationDistance(TEST_SIMULATION_DISTANCE);
+        level.getChunk(brainPos);
+        prepareSpawnArea(level, brainPos, false);
+        server.setDifficulty(Difficulty.HARD, true);
+        gameRules.getRule(GameRules.RULE_DOMOBSPAWNING).set(true, server);
+        hordeZombies(level, query).forEach(Entity::discard);
+        level.setDayTime(18000L);
+        level.setBlockAndUpdate(brainPos, TheyAreBillions.BRAIN_IN_A_JAR_BLOCK.get().defaultBlockState());
+
+        Runnable cleanup = () -> {
+            hordeZombies(level, query).forEach(Entity::discard);
+            level.removeBlock(brainPos, false);
+            clearSpawnArea(level, brainPos, false);
+            gameRules.getRule(GameRules.RULE_DOMOBSPAWNING).set(originalMobSpawning, server);
+            server.setDifficulty(originalDifficulty, true);
+            server.getPlayerList().setSimulationDistance(originalSimulationDistance);
+        };
+        helper.runAtTickTime(1199, cleanup);
+        helper.onEachTick(() -> {
+            List<HordeZombie> zombies = hordeZombies(level, query);
+            int count = zombies.size();
+            assertWithCleanup(
+                helper, cleanup, count <= previousCount[0] + 1, "A Brain in a Jar must add at most one horde zombie per tick"
+            );
+            previousCount[0] = count;
+            zombies.forEach(zombie -> zombie.setNoAi(true));
+        });
+        helper.startSequence()
+            .thenWaitUntil(() -> helper.assertTrue(hordeZombies(level, query).size() == 300, "The horde did not reach exactly 300 zombies"))
+            .thenExecuteFor(20, () -> {
+                if (hordeZombies(level, query).size() != 300) {
+                    cleanup.run();
+                    helper.fail("The horde exceeded or fell below 300 zombies");
+                }
+            })
+            .thenExecute(() -> hordeZombies(level, query).getFirst().kill())
+            .thenWaitUntil(() -> helper.assertTrue(hordeZombies(level, query).size() == 300, "A dead horde zombie was not refilled"))
+            .thenExecute(() -> {
+                gameRules.getRule(GameRules.RULE_DOMOBSPAWNING).set(false, server);
+                hordeZombies(level, query).getFirst().kill();
+            })
+            .thenExecuteFor(20, () -> {
+                if (hordeZombies(level, query).size() != 299) {
+                    cleanup.run();
+                    helper.fail("doMobSpawning=false must pause refill at 299");
+                }
+            })
+            .thenExecute(() -> gameRules.getRule(GameRules.RULE_DOMOBSPAWNING).set(true, server))
+            .thenWaitUntil(() -> helper.assertTrue(hordeZombies(level, query).size() == 300, "Re-enabling mob spawning did not resume refill"))
+            .thenExecute(() -> server.setDifficulty(Difficulty.PEACEFUL, true))
+            .thenWaitUntil(() -> helper.assertTrue(hordeZombies(level, query).isEmpty(), "Peaceful difficulty did not clear the horde"))
+            .thenExecute(() -> level.destroyBlock(brainPos, false))
+            .thenExecute(cleanup)
+            .thenSucceed();
+    }
+
+    private static void prepareSpawnArea(ServerLevel level, BlockPos brainPos, boolean lit) {
+        setSpawnArea(level, brainPos, lit, Blocks.STONE.defaultBlockState(), Blocks.LIGHT.defaultBlockState());
+    }
+
+    private static void clearSpawnArea(ServerLevel level, BlockPos brainPos, boolean lit) {
+        setSpawnArea(level, brainPos, lit, Blocks.AIR.defaultBlockState(), Blocks.AIR.defaultBlockState());
+    }
+
+    private static void setSpawnArea(
+        ServerLevel level, BlockPos brainPos, boolean lit, BlockState floorState, BlockState lightState
+    ) {
+        for (int x = -136; x <= 136; x++) {
+            for (int z = -136; z <= 136; z++) {
+                double distance = Math.hypot(x, z);
+                boolean spawnPosition = distance >= 64.0 && distance <= 128.0;
+                boolean lightPosition = lit
+                    && distance >= 56.0
+                    && distance <= 136.0
+                    && Math.floorMod(x, LIGHT_GRID_STEP) == 0
+                    && Math.floorMod(z, LIGHT_GRID_STEP) == 0;
+                if (!spawnPosition && !lightPosition) {
+                    continue;
+                }
+                BlockPos spawn = brainPos.offset(x, 0, z);
+                if (spawnPosition) {
+                    level.setBlock(spawn.below(), floorState, 2);
+                }
+                if (lightPosition) {
+                    level.setBlock(spawn.above(4), lightState, 2);
+                }
+            }
+        }
+    }
+
+    private static List<HordeZombie> hordeZombies(ServerLevel level, AABB query) {
+        return level.getEntities(TheyAreBillions.HORDE_ZOMBIE_ENTITY_TYPE.get(), query, Entity::isAlive);
+    }
+
+    private static void assertDirectionalPositions(
+        GameTestHelper helper, ServerLevel level, BlockPos brainPos, Iterable<BlockPos> positions
+    ) {
+        var iterator = positions.iterator();
+        BlockPos first = iterator.next();
+        int firstX = first.getX() - brainPos.getX();
+        int firstZ = first.getZ() - brainPos.getZ();
+        boolean xAxis = Math.abs(firstX) >= Math.abs(firstZ);
+        int directionSign = xAxis ? Integer.signum(firstX) : Integer.signum(firstZ);
+
+        for (BlockPos position : positions) {
+            int dx = position.getX() - brainPos.getX();
+            int dz = position.getZ() - brainPos.getZ();
+            double distance = Math.hypot(dx, dz);
+            int forward = directionSign * (xAxis ? dx : dz);
+            int side = xAxis ? dz : dx;
+            helper.assertTrue(distance >= 64.0 && distance <= 128.0, "Horde spawn is outside the 64-128 block annulus: " + position);
+            helper.assertTrue(Math.abs(position.getY() - brainPos.getY()) <= 32, "Horde spawn exceeds the vertical range: " + position);
+            helper.assertTrue(forward > 0 && Math.abs(side) <= forward * SECTOR_TANGENT, "Horde spawns crossed cardinal sectors: " + position);
+            helper.assertTrue(level.getBrightness(LightLayer.BLOCK, position) > 0, "Horde spawn incorrectly required darkness: " + position);
+        }
+    }
+
+    private static void assertWithCleanup(GameTestHelper helper, Runnable cleanup, boolean condition, String message) {
+        if (!condition) {
+            cleanup.run();
+            helper.fail(message);
+        }
+    }
+}
