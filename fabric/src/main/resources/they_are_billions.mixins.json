@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "package": "io.github.insulinocytus.theyarebillions.fabric.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "BaseSpawnerMixin",
+    "MobMixin",
+    "ServerLevelMixin",
+    "TrialSpawnerMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
