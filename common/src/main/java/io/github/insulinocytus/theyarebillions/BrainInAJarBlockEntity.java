@@ -37,6 +37,8 @@ public final class BrainInAJarBlockEntity extends BlockEntity {
 
     private boolean ownsForcedChunk;
     private int appliedTicketRadius;
+    private boolean ownershipReconciled;
+    private int ownershipReconciliationTicks;
     private @Nullable Direction hordeDirection;
     private boolean wasNight;
     private long selectedNight;
@@ -51,6 +53,16 @@ public final class BrainInAJarBlockEntity extends BlockEntity {
         }
 
         brain.updateTickets(serverLevel, pos);
+        if (!brain.ownershipReconciled) {
+            if (!brain.areOwnershipEntitiesLoaded(serverLevel, pos)) {
+                brain.ownershipReconciliationTicks = 0;
+                return;
+            }
+            if (++brain.ownershipReconciliationTicks < 2) {
+                return;
+            }
+            brain.ownershipReconciled = true;
+        }
         if (!serverLevel.isNight()) {
             if (brain.wasNight) {
                 brain.wasNight = false;
@@ -109,8 +121,34 @@ public final class BrainInAJarBlockEntity extends BlockEntity {
         }
         level.getChunkSource().addRegionTicket(TICKET, chunk, radius, pos);
         this.appliedTicketRadius = radius;
+        this.ownershipReconciled = false;
+        this.ownershipReconciliationTicks = 0;
     }
 
+    private boolean areOwnershipEntitiesLoaded(ServerLevel level, BlockPos brainPos) {
+        ChunkPos brainChunk = new ChunkPos(brainPos);
+        int radius = Mth.ceil(MAX_SPAWN_DISTANCE / 16.0);
+        for (Direction direction : Direction.Plane.HORIZONTAL) {
+            var boundaryChunk = new ChunkPos(
+                brainChunk.x + direction.getStepX() * radius,
+                brainChunk.z + direction.getStepZ() * radius
+            );
+            if (!level.isPositionEntityTicking(boundaryChunk.getMiddleBlockPosition(brainPos.getY()))) {
+                return false;
+            }
+        }
+
+        for (int x = brainChunk.x - radius; x <= brainChunk.x + radius; x++) {
+            for (int z = brainChunk.z - radius; z <= brainChunk.z + radius; z++) {
+                var chunk = new ChunkPos(x, z);
+                BlockPos sample = chunk.getMiddleBlockPosition(brainPos.getY());
+                if (level.isPositionEntityTicking(sample) && !level.areEntitiesLoaded(chunk.toLong())) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
     private int countOwnedHordeZombies(ServerLevel level, BlockPos brainPos) {
         int count = 0;
         for (var entity : level.getAllEntities()) {
@@ -183,7 +221,9 @@ public final class BrainInAJarBlockEntity extends BlockEntity {
     @Override
     protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
+        this.ownershipReconciled = false;
         this.ownsForcedChunk = tag.getBoolean(OWNS_FORCED_CHUNK_TAG);
+        this.ownershipReconciliationTicks = 0;
         this.hordeDirection = tag.contains(HORDE_DIRECTION_TAG, Tag.TAG_INT)
             ? Direction.from2DDataValue(tag.getInt(HORDE_DIRECTION_TAG))
             : null;

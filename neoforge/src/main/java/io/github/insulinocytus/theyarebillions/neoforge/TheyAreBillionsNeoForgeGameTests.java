@@ -23,7 +23,7 @@ public final class TheyAreBillionsNeoForgeGameTests {
         BrainInAJarHordeGameTest.verifyEntityTickingRange(helper);
     }
 
-    @GameTest(template = "empty", batch = "brain_in_a_jar_horde_direction", timeoutTicks = 300)
+    @GameTest(template = "empty", batch = "brain_in_a_jar_horde_direction", timeoutTicks = 600)
     public static void brainInAJarDirectionalHorde(GameTestHelper helper) {
         BrainInAJarHordeGameTest.verifyDirectionalNightHorde(helper);
     }
@@ -31,6 +31,11 @@ public final class TheyAreBillionsNeoForgeGameTests {
     @GameTest(template = "empty", batch = "brain_in_a_jar_horde_capacity", timeoutTicks = 1200)
     public static void brainInAJarHordeCapacity(GameTestHelper helper) {
         BrainInAJarHordeGameTest.verifyCapacityAndGates(helper);
+    }
+
+    @GameTest(template = "empty", batch = "brain_in_a_jar_independent_hordes", timeoutTicks = 4000)
+    public static void brainInAJarIndependentHordes(GameTestHelper helper) {
+        BrainInAJarHordeGameTest.verifyIndependentHordes(helper);
     }
 
     @GameTest(template = "empty")

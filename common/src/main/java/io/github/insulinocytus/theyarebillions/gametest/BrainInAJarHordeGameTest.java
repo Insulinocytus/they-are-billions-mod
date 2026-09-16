@@ -97,7 +97,7 @@ public final class BrainInAJarHordeGameTest {
             server.setDifficulty(originalDifficulty, true);
             server.getPlayerList().setSimulationDistance(originalSimulationDistance);
         };
-        helper.runAtTickTime(299, cleanup);
+        helper.runAtTickTime(599, cleanup);
         helper.onEachTick(() -> {
             List<HordeZombie> zombies = hordeZombies(level, query);
             assertWithCleanup(
@@ -195,6 +195,113 @@ public final class BrainInAJarHordeGameTest {
             .thenExecute(() -> server.setDifficulty(Difficulty.PEACEFUL, true))
             .thenWaitUntil(() -> helper.assertTrue(hordeZombies(level, query).isEmpty(), "Peaceful difficulty did not clear the horde"))
             .thenExecute(() -> level.destroyBlock(brainPos, false))
+            .thenExecute(cleanup)
+            .thenSucceed();
+    }
+
+    public static void verifyIndependentHordes(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var server = level.getServer();
+        var gameRules = level.getGameRules();
+        boolean originalMobSpawning = gameRules.getBoolean(GameRules.RULE_DOMOBSPAWNING);
+        Difficulty originalDifficulty = level.getDifficulty();
+        int originalSimulationDistance = server.getPlayerList().getSimulationDistance();
+        BlockPos firstBrain = helper.absolutePos(REMOTE_BRAIN);
+        BlockPos secondBrain = firstBrain.offset(0, 0, 320);
+        AABB firstQuery = new AABB(firstBrain).inflate(144.0, 48.0, 144.0);
+        AABB secondQuery = new AABB(secondBrain).inflate(144.0, 48.0, 144.0);
+        Map<UUID, BlockPos> firstInitialPositions = new LinkedHashMap<>();
+        Map<UUID, BlockPos> secondInitialPositions = new LinkedHashMap<>();
+        HordeZombie[] movedFromFirst = {null};
+        HordeZombie[] killedFromSecond = {null};
+
+        server.getPlayerList().setSimulationDistance(TEST_SIMULATION_DISTANCE);
+        level.getChunk(firstBrain);
+        level.getChunk(secondBrain);
+        prepareSpawnArea(level, firstBrain, true);
+        prepareSpawnArea(level, secondBrain, true);
+        server.setDifficulty(Difficulty.HARD, true);
+        gameRules.getRule(GameRules.RULE_DOMOBSPAWNING).set(true, server);
+        hordeZombies(level, firstQuery).forEach(Entity::discard);
+        hordeZombies(level, secondQuery).forEach(Entity::discard);
+        level.setDayTime(18000L);
+        level.setBlockAndUpdate(firstBrain, TheyAreBillions.BRAIN_IN_A_JAR_BLOCK.get().defaultBlockState());
+        level.setBlockAndUpdate(secondBrain, TheyAreBillions.BRAIN_IN_A_JAR_BLOCK.get().defaultBlockState());
+
+        Runnable cleanup = () -> {
+            hordeZombies(level, firstQuery).forEach(Entity::discard);
+            hordeZombies(level, secondQuery).forEach(Entity::discard);
+            level.removeBlock(firstBrain, false);
+            level.removeBlock(secondBrain, false);
+            clearSpawnArea(level, firstBrain, true);
+            clearSpawnArea(level, secondBrain, true);
+            gameRules.getRule(GameRules.RULE_DOMOBSPAWNING).set(originalMobSpawning, server);
+            server.setDifficulty(originalDifficulty, true);
+            server.getPlayerList().setSimulationDistance(originalSimulationDistance);
+        };
+        helper.runAtTickTime(3999, cleanup);
+        helper.onEachTick(() -> {
+            List<HordeZombie> firstHordeZombies = hordeZombies(level, firstQuery);
+            List<HordeZombie> secondHordeZombies = hordeZombies(level, secondQuery);
+            firstHordeZombies.forEach(zombie -> {
+                zombie.setNoAi(true);
+                firstInitialPositions.putIfAbsent(zombie.getUUID(), zombie.blockPosition());
+            });
+            secondHordeZombies.forEach(zombie -> {
+                zombie.setNoAi(true);
+                secondInitialPositions.putIfAbsent(zombie.getUUID(), zombie.blockPosition());
+            });
+        });
+
+        helper.startSequence()
+            .thenWaitUntil(() -> helper.assertTrue(
+                hordeZombies(level, firstQuery).size() == 300 && hordeZombies(level, secondQuery).size() == 300,
+                "Two Brains in a Jar did not independently reach 300 horde zombies each"
+            ))
+            .thenExecute(() -> {
+                try {
+                    assertDirectionalPositions(helper, level, firstBrain, firstInitialPositions.values());
+                    assertDirectionalPositions(helper, level, secondBrain, secondInitialPositions.values());
+                    movedFromFirst[0] = hordeZombies(level, firstQuery).getFirst();
+                    killedFromSecond[0] = hordeZombies(level, secondQuery).getFirst();
+                    movedFromFirst[0].moveTo(
+                        secondBrain.getX() + 64.5,
+                        secondBrain.getY(),
+                        secondBrain.getZ() + 0.5,
+                        movedFromFirst[0].getYRot(),
+                        movedFromFirst[0].getXRot()
+                    );
+                } catch (RuntimeException exception) {
+                    cleanup.run();
+                    throw exception;
+                }
+            })
+            .thenIdle(1)
+            .thenExecuteFor(20, () -> {
+                int firstCount = hordeZombies(level, firstQuery).size();
+                int secondCount = hordeZombies(level, secondQuery).size();
+                if (firstCount != 299 || secondCount != 301) {
+                    cleanup.run();
+                    helper.fail("Moving a horde zombie near another Brain changed ownership or capacity");
+                }
+            })
+            .thenExecute(() -> killedFromSecond[0].kill())
+            .thenWaitUntil(() -> helper.assertTrue(
+                hordeZombies(level, firstQuery).size() == 299 && hordeZombies(level, secondQuery).size() == 301,
+                "A death did not release and refill only the original Brain's slot"
+            ))
+            .thenExecute(() -> movedFromFirst[0].kill())
+            .thenWaitUntil(() -> helper.assertTrue(
+                hordeZombies(level, firstQuery).size() == 300 && hordeZombies(level, secondQuery).size() == 300,
+                "The moved zombie did not release its original Brain's slot"
+            ))
+            .thenExecute(() -> level.destroyBlock(firstBrain, false))
+            .thenExecute(() -> assertWithCleanup(
+                helper,
+                cleanup,
+                hordeZombies(level, secondQuery).size() == 300,
+                "Removing one Brain changed the other Brain's horde"
+            ))
             .thenExecute(cleanup)
             .thenSucceed();
     }
