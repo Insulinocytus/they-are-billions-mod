@@ -321,7 +321,7 @@ public final class BrainInAJarHordeGameTest {
         var remoteTicket = TicketType.create("they_are_billions:test_remote_horde", BlockPos::compareTo);
         AABB localQuery = new AABB(brainPos).inflate(144.0, 48.0, 144.0);
         AABB remoteQuery = new AABB(remotePos).inflate(8.0, 16.0, 8.0);
-        boolean[] remoteTicketActive = {false};
+        int[] remoteTicketRadius = {-1};
         UUID[] remoteZombieId = {null};
 
         server.getPlayerList().setSimulationDistance(TEST_SIMULATION_DISTANCE);
@@ -334,9 +334,9 @@ public final class BrainInAJarHordeGameTest {
         level.setBlockAndUpdate(brainPos, TheyAreBillions.BRAIN_IN_A_JAR_BLOCK.get().defaultBlockState());
 
         Runnable cleanup = () -> {
-            if (remoteTicketActive[0]) {
-                level.getChunkSource().removeRegionTicket(remoteTicket, remoteChunk, 2, remotePos);
-                remoteTicketActive[0] = false;
+            if (remoteTicketRadius[0] >= 0) {
+                level.getChunkSource().removeRegionTicket(remoteTicket, remoteChunk, remoteTicketRadius[0], remotePos);
+                remoteTicketRadius[0] = -1;
             }
             hordeZombies(level, localQuery).forEach(Entity::discard);
             hordeZombies(level, remoteQuery).forEach(Entity::discard);
@@ -357,8 +357,8 @@ public final class BrainInAJarHordeGameTest {
                 hordeZombies(level, localQuery).size() == 300, "The horde did not reach exactly 300 zombies"
             ))
             .thenExecute(() -> {
-                level.getChunkSource().addRegionTicket(remoteTicket, remoteChunk, 2, remotePos);
-                remoteTicketActive[0] = true;
+                remoteTicketRadius[0] = 2;
+                level.getChunkSource().addRegionTicket(remoteTicket, remoteChunk, remoteTicketRadius[0], remotePos);
             })
             .thenWaitUntil(() -> helper.assertTrue(
                 level.isPositionEntityTicking(remotePos), "The remote ownership chunk did not become entity ticking"
@@ -370,8 +370,8 @@ public final class BrainInAJarHordeGameTest {
             })
             .thenIdle(1)
             .thenExecute(() -> {
-                level.getChunkSource().removeRegionTicket(remoteTicket, remoteChunk, 2, remotePos);
-                remoteTicketActive[0] = false;
+                level.getChunkSource().removeRegionTicket(remoteTicket, remoteChunk, remoteTicketRadius[0], remotePos);
+                remoteTicketRadius[0] = -1;
             })
             .thenWaitUntil(() -> helper.assertTrue(
                 !level.areEntitiesLoaded(remoteChunk.toLong()), "The remote ownership chunk did not unload"
@@ -397,18 +397,16 @@ public final class BrainInAJarHordeGameTest {
                 hordeZombies(level, localQuery).size() == 300, "The unloaded owner slot was not refilled"
             ))
             .thenExecute(() -> {
-                level.getChunkSource().addRegionTicket(remoteTicket, remoteChunk, 2, remotePos);
-                remoteTicketActive[0] = true;
+                remoteTicketRadius[0] = 0;
+                level.getChunkSource().addRegionTicket(remoteTicket, remoteChunk, remoteTicketRadius[0], remotePos);
             })
             .thenWaitUntil(() -> helper.assertTrue(
-                level.areEntitiesLoaded(remoteChunk.toLong()), "The remote ownership chunk did not reload"
+                level.areEntitiesLoaded(remoteChunk.toLong()) && !level.isPositionEntityTicking(remotePos),
+                "The remote ownership chunk did not reload as tracked but not entity ticking"
             ))
-            .thenIdle(2)
-            .thenExecute(() -> assertWithCleanup(
-                helper,
-                cleanup,
+            .thenWaitUntil(() -> helper.assertTrue(
                 hordeZombies(level, localQuery).size() == 300 && hordeZombies(level, remoteQuery).isEmpty(),
-                "A runtime-unloaded zombie rejoined and exceeded its Brain's 300-zombie budget"
+                "A tracked but non-ticking zombie rejoined and exceeded its Brain's 300-zombie budget"
             ))
             .thenExecute(cleanup)
             .thenSucceed();

@@ -6,6 +6,7 @@ import io.github.insulinocytus.theyarebillions.ZombieSpawnFilter;
 import net.minecraft.server.level.ServerLevel;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 import net.neoforged.neoforge.event.entity.EntityLeaveLevelEvent;
 import net.neoforged.neoforge.event.entity.living.FinalizeSpawnEvent;
 
@@ -13,6 +14,7 @@ import net.neoforged.neoforge.event.entity.living.FinalizeSpawnEvent;
 public final class TheyAreBillionsNeoForge {
     public TheyAreBillionsNeoForge() {
         NeoForge.EVENT_BUS.addListener(TheyAreBillionsNeoForge::onFinalizeSpawn);
+        NeoForge.EVENT_BUS.addListener(TheyAreBillionsNeoForge::onEntityJoinLevel);
         NeoForge.EVENT_BUS.addListener(TheyAreBillionsNeoForge::onEntityLeaveLevel);
         TheyAreBillions.init();
     }
@@ -20,6 +22,14 @@ public final class TheyAreBillionsNeoForge {
     private static void onFinalizeSpawn(FinalizeSpawnEvent event) {
         if (ZombieSpawnFilter.blocks(event.getEntity().getType(), event.getSpawnType())) {
             event.setSpawnCancelled(true);
+        }
+    }
+
+    private static void onEntityJoinLevel(EntityJoinLevelEvent event) {
+        if (event.getEntity() instanceof HordeZombie zombie
+            && event.getLevel() instanceof ServerLevel level
+            && !zombie.validateOwnership(level)) {
+            event.setCanceled(true);
         }
     }
 

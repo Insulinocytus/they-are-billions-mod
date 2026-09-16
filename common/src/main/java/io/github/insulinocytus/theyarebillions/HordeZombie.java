@@ -44,7 +44,8 @@ public final class HordeZombie extends Zombie {
 
     @Override
     public void tick() {
-        if (!this.verifyOwnership()) {
+        if (this.level() instanceof ServerLevel level && !this.validateOwnership(level)) {
+            this.discard();
             return;
         }
         super.tick();
@@ -69,15 +70,12 @@ public final class HordeZombie extends Zombie {
         }
     }
 
-    private boolean verifyOwnership() {
+    public boolean validateOwnership(ServerLevel currentLevel) {
         if (this.ownershipVerified) {
             return true;
         }
         if (this.brainPos == null) {
             this.ownershipVerified = true;
-            return true;
-        }
-        if (!(this.level() instanceof ServerLevel currentLevel)) {
             return true;
         }
 
@@ -91,7 +89,6 @@ public final class HordeZombie extends Zombie {
             return true;
         }
         if (!brain.ownsHordeZombie(this.getUUID())) {
-            this.discard();
             return false;
         }
 
