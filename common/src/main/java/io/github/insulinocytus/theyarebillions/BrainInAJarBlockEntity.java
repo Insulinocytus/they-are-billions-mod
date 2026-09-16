@@ -57,6 +57,7 @@ public final class BrainInAJarBlockEntity extends BlockEntity {
         if (!(level instanceof ServerLevel serverLevel) || !level.dimension().equals(Level.OVERWORLD)) {
             return;
         }
+        HordeZombie.validatePendingOwnershipBeforeBrainTick(serverLevel);
 
         brain.updateTickets(serverLevel, pos);
         if (!serverLevel.isNight()) {

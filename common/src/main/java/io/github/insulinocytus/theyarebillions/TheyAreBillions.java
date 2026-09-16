@@ -1,5 +1,7 @@
 package io.github.insulinocytus.theyarebillions;
 
+import dev.architectury.event.events.common.LifecycleEvent;
+import dev.architectury.event.events.common.TickEvent;
 import dev.architectury.registry.CreativeTabRegistry;
 import dev.architectury.registry.level.entity.EntityAttributeRegistry;
 import dev.architectury.registry.registries.DeferredRegister;
@@ -65,5 +67,7 @@ public final class TheyAreBillions {
         TABS.register();
         ENTITY_TYPES.register();
         EntityAttributeRegistry.register(HORDE_ZOMBIE_ENTITY_TYPE, Zombie::createAttributes);
+        TickEvent.SERVER_LEVEL_POST.register(HordeZombie::validatePendingOwnership);
+        LifecycleEvent.SERVER_STOPPED.register(server -> HordeZombie.clearPendingOwnership());
     }
 }

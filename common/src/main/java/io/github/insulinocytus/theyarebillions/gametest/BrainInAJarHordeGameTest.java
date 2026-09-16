@@ -8,6 +8,7 @@ import java.util.UUID;
 import io.github.insulinocytus.theyarebillions.HordeZombie;
 import io.github.insulinocytus.theyarebillions.TheyAreBillions;
 import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.TicketType;
@@ -17,6 +18,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.LightLayer;
+import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
@@ -319,9 +321,14 @@ public final class BrainInAJarHordeGameTest {
         BlockPos remotePos = brainPos.offset(384, 0, 0);
         var remoteChunk = new ChunkPos(remotePos);
         var remoteTicket = TicketType.create("they_are_billions:test_remote_horde", BlockPos::compareTo);
+        BlockPos pendingOwnerPos = brainPos.offset(16384, 0, 16384);
+        var pendingOwnerChunk = new ChunkPos(pendingOwnerPos);
+        var pendingOwnerTicket = TicketType.create("they_are_billions:test_pending_owner", BlockPos::compareTo);
         AABB localQuery = new AABB(brainPos).inflate(144.0, 48.0, 144.0);
         AABB remoteQuery = new AABB(remotePos).inflate(8.0, 16.0, 8.0);
         int[] remoteTicketRadius = {-1};
+        boolean[] pendingOwnerTicketActive = {false};
+        HordeZombie[] pendingOwnerProbe = {null};
         UUID[] remoteZombieId = {null};
 
         server.getPlayerList().setSimulationDistance(TEST_SIMULATION_DISTANCE);
@@ -337,6 +344,13 @@ public final class BrainInAJarHordeGameTest {
             if (remoteTicketRadius[0] >= 0) {
                 level.getChunkSource().removeRegionTicket(remoteTicket, remoteChunk, remoteTicketRadius[0], remotePos);
                 remoteTicketRadius[0] = -1;
+            }
+            if (pendingOwnerTicketActive[0]) {
+                level.getChunkSource().removeRegionTicket(pendingOwnerTicket, pendingOwnerChunk, 0, pendingOwnerPos);
+                pendingOwnerTicketActive[0] = false;
+            }
+            if (pendingOwnerProbe[0] != null) {
+                pendingOwnerProbe[0].discard();
             }
             hordeZombies(level, localQuery).forEach(Entity::discard);
             hordeZombies(level, remoteQuery).forEach(Entity::discard);
@@ -356,6 +370,48 @@ public final class BrainInAJarHordeGameTest {
             .thenWaitUntil(() -> helper.assertTrue(
                 hordeZombies(level, localQuery).size() == 300, "The horde did not reach exactly 300 zombies"
             ))
+            .thenExecute(() -> {
+                level.getChunkSource().addRegionTicket(pendingOwnerTicket, pendingOwnerChunk, 0, pendingOwnerPos);
+                pendingOwnerTicketActive[0] = true;
+                level.getChunkSource().getChunk(pendingOwnerChunk.x, pendingOwnerChunk.z, ChunkStatus.EMPTY, true);
+                helper.assertTrue(
+                    level.getChunkSource().hasChunk(pendingOwnerChunk.x, pendingOwnerChunk.z)
+                        && level.getChunkSource().getChunkNow(pendingOwnerChunk.x, pendingOwnerChunk.z) == null,
+                    "The test did not establish an owner chunk awaiting FULL promotion"
+                );
+
+                pendingOwnerProbe[0] = TheyAreBillions.HORDE_ZOMBIE_ENTITY_TYPE.get().create(level);
+                helper.assertTrue(pendingOwnerProbe[0] != null, "Could not create the pending-owner recovery probe");
+                CompoundTag tag = hordeZombies(level, localQuery).getFirst().saveWithoutId(new CompoundTag());
+                tag.remove("UUID");
+                tag.putLong("BrainPos", pendingOwnerPos.asLong());
+                pendingOwnerProbe[0].load(tag);
+                pendingOwnerProbe[0].moveTo(brainPos.getX() + 0.5, brainPos.getY() + 80.0, brainPos.getZ() + 0.5);
+                pendingOwnerProbe[0].setNoGravity(true);
+
+                helper.assertTrue(
+                    level.addFreshEntity(pendingOwnerProbe[0]), "Could not add the pending-owner recovery probe"
+                );
+                helper.assertTrue(
+                    level.getChunkSource().getChunkNow(pendingOwnerChunk.x, pendingOwnerChunk.z) == null,
+                    "Loading a horde zombie synchronously promoted its owner chunk to FULL"
+                );
+            })
+            .thenWaitUntil(() -> {
+                CompoundTag tag = pendingOwnerProbe[0].saveWithoutId(new CompoundTag());
+                helper.assertTrue(
+                    level.getChunkSource().getChunkNow(pendingOwnerChunk.x, pendingOwnerChunk.z) != null
+                        && !tag.contains("BrainPos"),
+                    "The horde zombie was not revalidated after its owner chunk reached FULL"
+                );
+            })
+            .thenExecute(() -> {
+                pendingOwnerProbe[0].discard();
+                helper.assertTrue(
+                    level.getChunkSource().getChunkNow(pendingOwnerChunk.x, pendingOwnerChunk.z) != null,
+                    "Unloading a horde zombie changed its already-loaded owner chunk"
+                );
+            })
             .thenExecute(() -> {
                 remoteTicketRadius[0] = 2;
                 level.getChunkSource().addRegionTicket(remoteTicket, remoteChunk, remoteTicketRadius[0], remotePos);

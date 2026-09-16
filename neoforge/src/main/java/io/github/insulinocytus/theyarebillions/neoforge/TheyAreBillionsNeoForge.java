@@ -28,7 +28,7 @@ public final class TheyAreBillionsNeoForge {
     private static void onEntityJoinLevel(EntityJoinLevelEvent event) {
         if (event.getEntity() instanceof HordeZombie zombie
             && event.getLevel() instanceof ServerLevel level
-            && !zombie.validateOwnership(level)) {
+            && !zombie.validateOwnershipOnLoad(level)) {
             event.setCanceled(true);
         }
     }

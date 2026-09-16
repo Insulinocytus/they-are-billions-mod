@@ -11,7 +11,7 @@ public final class TheyAreBillionsFabric implements ModInitializer {
     public void onInitialize() {
         TheyAreBillions.init();
         ServerEntityEvents.ENTITY_LOAD.register((entity, level) -> {
-            if (entity instanceof HordeZombie zombie && !zombie.validateOwnership(level)) {
+            if (entity instanceof HordeZombie zombie && !zombie.validateOwnershipOnLoad(level)) {
                 level.getServer().tell(new TickTask(level.getServer().getTickCount(), zombie::discard));
             }
         });
