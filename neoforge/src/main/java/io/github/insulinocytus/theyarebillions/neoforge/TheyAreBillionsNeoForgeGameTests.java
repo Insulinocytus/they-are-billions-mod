@@ -38,6 +38,11 @@ public final class TheyAreBillionsNeoForgeGameTests {
         BrainInAJarHordeGameTest.verifyIndependentHordes(helper);
     }
 
+    @GameTest(template = "empty", batch = "brain_in_a_jar_remote_ownership", timeoutTicks = 4000)
+    public static void brainInAJarRemoteOwnershipRecovery(GameTestHelper helper) {
+        BrainInAJarHordeGameTest.verifyRemoteOwnershipRecovery(helper);
+    }
+
     @GameTest(template = "empty")
     public static void hordeZombie(GameTestHelper helper) {
         HordeZombieGameTest.verify(helper);

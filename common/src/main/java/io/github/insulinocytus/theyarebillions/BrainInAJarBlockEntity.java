@@ -1,10 +1,16 @@
 package io.github.insulinocytus.theyarebillions;
 
+import java.util.HashSet;
+import java.util.Set;
+import java.util.UUID;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.Vec3i;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.NbtUtils;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.TicketType;
@@ -13,8 +19,8 @@ import net.minecraft.world.Difficulty;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.level.ChunkPos;
-import net.minecraft.world.level.Level;
 import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.NaturalSpawner;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -27,6 +33,7 @@ public final class BrainInAJarBlockEntity extends BlockEntity {
     private static final TicketType<BlockPos> TICKET = TicketType.create("they_are_billions:brain_in_a_jar", Vec3i::compareTo);
     private static final int MAX_HORDE_SIZE = 300;
     private static final String OWNS_FORCED_CHUNK_TAG = "OwnsForcedChunk";
+    private static final String OWNED_HORDE_ZOMBIES_TAG = "OwnedHordeZombies";
     private static final String HORDE_DIRECTION_TAG = "HordeDirection";
     private static final String WAS_NIGHT_TAG = "WasNight";
     private static final String SELECTED_NIGHT_TAG = "SelectedNight";
@@ -37,8 +44,7 @@ public final class BrainInAJarBlockEntity extends BlockEntity {
 
     private boolean ownsForcedChunk;
     private int appliedTicketRadius;
-    private boolean ownershipReconciled;
-    private int ownershipReconciliationTicks;
+    private final Set<UUID> ownedHordeZombies = new HashSet<>();
     private @Nullable Direction hordeDirection;
     private boolean wasNight;
     private long selectedNight;
@@ -53,16 +59,6 @@ public final class BrainInAJarBlockEntity extends BlockEntity {
         }
 
         brain.updateTickets(serverLevel, pos);
-        if (!brain.ownershipReconciled) {
-            if (!brain.areOwnershipEntitiesLoaded(serverLevel, pos)) {
-                brain.ownershipReconciliationTicks = 0;
-                return;
-            }
-            if (++brain.ownershipReconciliationTicks < 2) {
-                return;
-            }
-            brain.ownershipReconciled = true;
-        }
         if (!serverLevel.isNight()) {
             if (brain.wasNight) {
                 brain.wasNight = false;
@@ -78,7 +74,7 @@ public final class BrainInAJarBlockEntity extends BlockEntity {
             brain.selectedNight = night;
             brain.setChanged();
         }
-        int ownedHordeZombies = brain.countOwnedHordeZombies(serverLevel, pos);
+        int ownedHordeZombies = brain.ownedHordeZombies.size();
         if (brain.hordeDirection != null
             && level.getDifficulty() != Difficulty.PEACEFUL
             && level.getGameRules().getBoolean(GameRules.RULE_DOMOBSPAWNING)
@@ -121,42 +117,16 @@ public final class BrainInAJarBlockEntity extends BlockEntity {
         }
         level.getChunkSource().addRegionTicket(TICKET, chunk, radius, pos);
         this.appliedTicketRadius = radius;
-        this.ownershipReconciled = false;
-        this.ownershipReconciliationTicks = 0;
     }
 
-    private boolean areOwnershipEntitiesLoaded(ServerLevel level, BlockPos brainPos) {
-        ChunkPos brainChunk = new ChunkPos(brainPos);
-        int radius = Mth.ceil(MAX_SPAWN_DISTANCE / 16.0);
-        for (Direction direction : Direction.Plane.HORIZONTAL) {
-            var boundaryChunk = new ChunkPos(
-                brainChunk.x + direction.getStepX() * radius,
-                brainChunk.z + direction.getStepZ() * radius
-            );
-            if (!level.isPositionEntityTicking(boundaryChunk.getMiddleBlockPosition(brainPos.getY()))) {
-                return false;
-            }
-        }
-
-        for (int x = brainChunk.x - radius; x <= brainChunk.x + radius; x++) {
-            for (int z = brainChunk.z - radius; z <= brainChunk.z + radius; z++) {
-                var chunk = new ChunkPos(x, z);
-                BlockPos sample = chunk.getMiddleBlockPosition(brainPos.getY());
-                if (level.isPositionEntityTicking(sample) && !level.areEntitiesLoaded(chunk.toLong())) {
-                    return false;
-                }
-            }
-        }
-        return true;
+    boolean ownsHordeZombie(UUID zombieId) {
+        return this.ownedHordeZombies.contains(zombieId);
     }
-    private int countOwnedHordeZombies(ServerLevel level, BlockPos brainPos) {
-        int count = 0;
-        for (var entity : level.getAllEntities()) {
-            if (entity instanceof HordeZombie zombie && zombie.isAlive() && brainPos.equals(zombie.getBrainPos())) {
-                count++;
-            }
+
+    void releaseHordeZombie(UUID zombieId) {
+        if (this.ownedHordeZombies.remove(zombieId)) {
+            this.setChanged();
         }
-        return count;
     }
 
     private void trySpawnHordeZombie(ServerLevel level, BlockPos brainPos, Direction direction) {
@@ -215,15 +185,22 @@ public final class BrainInAJarBlockEntity extends BlockEntity {
             return;
         }
         zombie.finalizeSpawn(level, level.getCurrentDifficultyAt(candidate), MobSpawnType.EVENT, null);
-        level.addFreshEntity(zombie);
+        this.ownedHordeZombies.add(zombie.getUUID());
+        if (!level.addFreshEntity(zombie)) {
+            this.ownedHordeZombies.remove(zombie.getUUID());
+            return;
+        }
+        this.setChanged();
     }
 
     @Override
     protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
-        this.ownershipReconciled = false;
+        this.ownedHordeZombies.clear();
+        for (Tag zombieId : tag.getList(OWNED_HORDE_ZOMBIES_TAG, Tag.TAG_INT_ARRAY)) {
+            this.ownedHordeZombies.add(NbtUtils.loadUUID(zombieId));
+        }
         this.ownsForcedChunk = tag.getBoolean(OWNS_FORCED_CHUNK_TAG);
-        this.ownershipReconciliationTicks = 0;
         this.hordeDirection = tag.contains(HORDE_DIRECTION_TAG, Tag.TAG_INT)
             ? Direction.from2DDataValue(tag.getInt(HORDE_DIRECTION_TAG))
             : null;
@@ -234,6 +211,11 @@ public final class BrainInAJarBlockEntity extends BlockEntity {
     @Override
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
+        var ownedHordeZombiesTag = new ListTag();
+        for (UUID zombieId : this.ownedHordeZombies) {
+            ownedHordeZombiesTag.add(NbtUtils.createUUID(zombieId));
+        }
+        tag.put(OWNED_HORDE_ZOMBIES_TAG, ownedHordeZombiesTag);
         tag.putBoolean(OWNS_FORCED_CHUNK_TAG, this.ownsForcedChunk);
         if (this.hordeDirection != null) {
             tag.putInt(HORDE_DIRECTION_TAG, this.hordeDirection.get2DDataValue());

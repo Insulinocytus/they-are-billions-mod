@@ -10,6 +10,7 @@ import io.github.insulinocytus.theyarebillions.TheyAreBillions;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.TicketType;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.ChunkPos;
@@ -21,7 +22,7 @@ import net.minecraft.world.phys.AABB;
 
 public final class BrainInAJarHordeGameTest {
     private static final BlockPos REMOTE_BRAIN = new BlockPos(96, 2, 0);
-    private static final int TEST_SIMULATION_DISTANCE = 10;
+    private static final int TEST_SIMULATION_DISTANCE = 6;
     private static final int LIGHT_GRID_STEP = 8;
     private static final double SECTOR_TANGENT = Math.tan(Math.toRadians(22.5));
 
@@ -301,6 +302,92 @@ public final class BrainInAJarHordeGameTest {
                 cleanup,
                 hordeZombies(level, secondQuery).size() == 300,
                 "Removing one Brain changed the other Brain's horde"
+            ))
+            .thenExecute(cleanup)
+            .thenSucceed();
+    }
+
+    public static void verifyRemoteOwnershipRecovery(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var server = level.getServer();
+        var gameRules = level.getGameRules();
+        boolean originalMobSpawning = gameRules.getBoolean(GameRules.RULE_DOMOBSPAWNING);
+        Difficulty originalDifficulty = level.getDifficulty();
+        int originalSimulationDistance = server.getPlayerList().getSimulationDistance();
+        BlockPos brainPos = helper.absolutePos(REMOTE_BRAIN);
+        BlockPos remotePos = brainPos.offset(384, 0, 0);
+        var remoteChunk = new ChunkPos(remotePos);
+        var remoteTicket = TicketType.create("they_are_billions:test_remote_horde", BlockPos::compareTo);
+        AABB localQuery = new AABB(brainPos).inflate(144.0, 48.0, 144.0);
+        AABB remoteQuery = new AABB(remotePos).inflate(8.0, 16.0, 8.0);
+        boolean[] remoteTicketActive = {false};
+
+        server.getPlayerList().setSimulationDistance(TEST_SIMULATION_DISTANCE);
+        level.getChunk(brainPos);
+        prepareSpawnArea(level, brainPos, false);
+        server.setDifficulty(Difficulty.HARD, true);
+        gameRules.getRule(GameRules.RULE_DOMOBSPAWNING).set(true, server);
+        hordeZombies(level, localQuery).forEach(Entity::discard);
+        level.setDayTime(18000L);
+        level.setBlockAndUpdate(brainPos, TheyAreBillions.BRAIN_IN_A_JAR_BLOCK.get().defaultBlockState());
+
+        Runnable cleanup = () -> {
+            if (remoteTicketActive[0]) {
+                level.getChunkSource().removeRegionTicket(remoteTicket, remoteChunk, 2, remotePos);
+                remoteTicketActive[0] = false;
+            }
+            hordeZombies(level, localQuery).forEach(Entity::discard);
+            hordeZombies(level, remoteQuery).forEach(Entity::discard);
+            level.removeBlock(brainPos, false);
+            clearSpawnArea(level, brainPos, false);
+            gameRules.getRule(GameRules.RULE_DOMOBSPAWNING).set(originalMobSpawning, server);
+            server.setDifficulty(originalDifficulty, true);
+            server.getPlayerList().setSimulationDistance(originalSimulationDistance);
+        };
+        helper.runAtTickTime(3999, cleanup);
+        helper.onEachTick(() -> {
+            hordeZombies(level, localQuery).forEach(zombie -> zombie.setNoAi(true));
+            hordeZombies(level, remoteQuery).forEach(zombie -> zombie.setNoAi(true));
+        });
+
+        helper.startSequence()
+            .thenWaitUntil(() -> helper.assertTrue(
+                hordeZombies(level, localQuery).size() == 300, "The horde did not reach exactly 300 zombies"
+            ))
+            .thenExecute(() -> {
+                level.getChunkSource().addRegionTicket(remoteTicket, remoteChunk, 2, remotePos);
+                remoteTicketActive[0] = true;
+            })
+            .thenWaitUntil(() -> helper.assertTrue(
+                level.isPositionEntityTicking(remotePos), "The remote ownership chunk did not become entity ticking"
+            ))
+            .thenExecute(() -> hordeZombies(level, localQuery).getFirst().moveTo(
+                remotePos.getX() + 0.5, remotePos.getY(), remotePos.getZ() + 0.5
+            ))
+            .thenIdle(1)
+            .thenExecute(() -> {
+                level.getChunkSource().removeRegionTicket(remoteTicket, remoteChunk, 2, remotePos);
+                remoteTicketActive[0] = false;
+            })
+            .thenWaitUntil(() -> helper.assertTrue(
+                !level.areEntitiesLoaded(remoteChunk.toLong()), "The remote ownership chunk did not unload"
+            ))
+            .thenWaitUntil(() -> helper.assertTrue(
+                hordeZombies(level, localQuery).size() == 300, "The unloaded owner slot was not refilled"
+            ))
+            .thenExecute(() -> {
+                level.getChunkSource().addRegionTicket(remoteTicket, remoteChunk, 2, remotePos);
+                remoteTicketActive[0] = true;
+            })
+            .thenWaitUntil(() -> helper.assertTrue(
+                level.areEntitiesLoaded(remoteChunk.toLong()), "The remote ownership chunk did not reload"
+            ))
+            .thenIdle(2)
+            .thenExecute(() -> assertWithCleanup(
+                helper,
+                cleanup,
+                hordeZombies(level, localQuery).size() == 300 && hordeZombies(level, remoteQuery).isEmpty(),
+                "A runtime-unloaded zombie rejoined and exceeded its Brain's 300-zombie budget"
             ))
             .thenExecute(cleanup)
             .thenSucceed();

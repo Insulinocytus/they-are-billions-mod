@@ -26,16 +26,81 @@ public final class HordeZombie extends Zombie {
     private static final String BRAIN_POS_TAG = "BrainPos";
 
     private @Nullable BlockPos brainPos;
+    private boolean ownershipVerified;
+    private boolean runtimeUnloaded;
+
     public HordeZombie(EntityType<? extends Zombie> entityType, Level level) {
         super(entityType, level);
     }
 
     void setBrainPos(BlockPos brainPos) {
         this.brainPos = brainPos.immutable();
+        this.ownershipVerified = false;
     }
 
     @Nullable BlockPos getBrainPos() {
         return this.brainPos;
+    }
+
+    @Override
+    public void tick() {
+        if (!this.verifyOwnership()) {
+            return;
+        }
+        super.tick();
+    }
+
+    public void onUnloaded(ServerLevel level) {
+        Entity.RemovalReason removalReason = this.getRemovalReason();
+        if (this.brainPos == null
+            || level.getServer().isStopped()
+            || removalReason == Entity.RemovalReason.CHANGED_DIMENSION) {
+            return;
+        }
+
+        this.runtimeUnloaded = removalReason == null || removalReason == Entity.RemovalReason.UNLOADED_TO_CHUNK;
+        this.ownershipVerified = false;
+        ServerLevel ownerLevel = level.getServer().getLevel(Level.OVERWORLD);
+        if (ownerLevel != null
+            && ownerLevel.isLoaded(this.brainPos)
+            && ownerLevel.getBlockEntity(this.brainPos) instanceof BrainInAJarBlockEntity brain) {
+            brain.releaseHordeZombie(this.getUUID());
+        }
+    }
+
+    private boolean verifyOwnership() {
+        if (this.ownershipVerified) {
+            return true;
+        }
+        if (this.brainPos == null) {
+            this.ownershipVerified = true;
+            return true;
+        }
+        if (!(this.level() instanceof ServerLevel currentLevel)) {
+            return true;
+        }
+
+        ServerLevel ownerLevel = currentLevel.getServer().getLevel(Level.OVERWORLD);
+        if (ownerLevel == null || !ownerLevel.isLoaded(this.brainPos)) {
+            return true;
+        }
+        if (!(ownerLevel.getBlockEntity(this.brainPos) instanceof BrainInAJarBlockEntity brain)) {
+            this.brainPos = null;
+            this.ownershipVerified = true;
+            return true;
+        }
+        if (!brain.ownsHordeZombie(this.getUUID())) {
+            this.discard();
+            return false;
+        }
+
+        this.ownershipVerified = true;
+        return true;
+    }
+
+    @Override
+    public boolean shouldBeSaved() {
+        return !this.runtimeUnloaded && super.shouldBeSaved();
     }
 
     @Override
@@ -50,6 +115,8 @@ public final class HordeZombie extends Zombie {
     public void readAdditionalSaveData(CompoundTag tag) {
         super.readAdditionalSaveData(tag);
         this.brainPos = tag.contains(BRAIN_POS_TAG) ? BlockPos.of(tag.getLong(BRAIN_POS_TAG)) : null;
+        this.ownershipVerified = false;
+        this.runtimeUnloaded = false;
     }
 
     @Override
