@@ -2,6 +2,7 @@ package io.github.insulinocytus.theyarebillions;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.TickTask;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.DifficultyInstance;
 import net.minecraft.world.damagesource.DamageSource;
@@ -27,7 +28,6 @@ public final class HordeZombie extends Zombie {
 
     private @Nullable BlockPos brainPos;
     private boolean ownershipVerified;
-    private boolean runtimeUnloaded;
 
     public HordeZombie(EntityType<? extends Zombie> entityType, Level level) {
         super(entityType, level);
@@ -58,13 +58,14 @@ public final class HordeZombie extends Zombie {
             return;
         }
 
-        this.runtimeUnloaded = removalReason == null || removalReason == Entity.RemovalReason.UNLOADED_TO_CHUNK;
-        this.ownershipVerified = false;
         ServerLevel ownerLevel = level.getServer().getLevel(Level.OVERWORLD);
         if (ownerLevel != null
             && ownerLevel.isLoaded(this.brainPos)
             && ownerLevel.getBlockEntity(this.brainPos) instanceof BrainInAJarBlockEntity brain) {
             brain.releaseHordeZombie(this.getUUID());
+        }
+        if (removalReason == null) {
+            level.getServer().tell(new TickTask(level.getServer().getTickCount(), this::discard));
         }
     }
 
@@ -99,11 +100,6 @@ public final class HordeZombie extends Zombie {
     }
 
     @Override
-    public boolean shouldBeSaved() {
-        return !this.runtimeUnloaded && super.shouldBeSaved();
-    }
-
-    @Override
     public void addAdditionalSaveData(CompoundTag tag) {
         super.addAdditionalSaveData(tag);
         if (this.brainPos != null) {
@@ -116,7 +112,6 @@ public final class HordeZombie extends Zombie {
         super.readAdditionalSaveData(tag);
         this.brainPos = tag.contains(BRAIN_POS_TAG) ? BlockPos.of(tag.getLong(BRAIN_POS_TAG)) : null;
         this.ownershipVerified = false;
-        this.runtimeUnloaded = false;
     }
 
     @Override

@@ -13,6 +13,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.TicketType;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.LightLayer;
@@ -321,6 +322,7 @@ public final class BrainInAJarHordeGameTest {
         AABB localQuery = new AABB(brainPos).inflate(144.0, 48.0, 144.0);
         AABB remoteQuery = new AABB(remotePos).inflate(8.0, 16.0, 8.0);
         boolean[] remoteTicketActive = {false};
+        UUID[] remoteZombieId = {null};
 
         server.getPlayerList().setSimulationDistance(TEST_SIMULATION_DISTANCE);
         level.getChunk(brainPos);
@@ -361,9 +363,11 @@ public final class BrainInAJarHordeGameTest {
             .thenWaitUntil(() -> helper.assertTrue(
                 level.isPositionEntityTicking(remotePos), "The remote ownership chunk did not become entity ticking"
             ))
-            .thenExecute(() -> hordeZombies(level, localQuery).getFirst().moveTo(
-                remotePos.getX() + 0.5, remotePos.getY(), remotePos.getZ() + 0.5
-            ))
+            .thenExecute(() -> {
+                var remoteZombie = hordeZombies(level, localQuery).getFirst();
+                remoteZombieId[0] = remoteZombie.getUUID();
+                remoteZombie.moveTo(remotePos.getX() + 0.5, remotePos.getY(), remotePos.getZ() + 0.5);
+            })
             .thenIdle(1)
             .thenExecute(() -> {
                 level.getChunkSource().removeRegionTicket(remoteTicket, remoteChunk, 2, remotePos);
@@ -372,6 +376,23 @@ public final class BrainInAJarHordeGameTest {
             .thenWaitUntil(() -> helper.assertTrue(
                 !level.areEntitiesLoaded(remoteChunk.toLong()), "The remote ownership chunk did not unload"
             ))
+            .thenIdle(1)
+            .thenExecute(() -> {
+                var probe = EntityType.ARMOR_STAND.create(level);
+                helper.assertTrue(probe != null, "Could not create the UUID ownership probe");
+                probe.setUUID(remoteZombieId[0]);
+                probe.moveTo(brainPos.getX() + 0.5, brainPos.getY(), brainPos.getZ() + 0.5);
+                boolean added = level.tryAddFreshEntityWithPassengers(probe);
+                if (added) {
+                    probe.discard();
+                }
+                assertWithCleanup(
+                    helper,
+                    cleanup,
+                    added,
+                    "A runtime-unloaded zombie remained registered in the entity manager"
+                );
+            })
             .thenWaitUntil(() -> helper.assertTrue(
                 hordeZombies(level, localQuery).size() == 300, "The unloaded owner slot was not refilled"
             ))
