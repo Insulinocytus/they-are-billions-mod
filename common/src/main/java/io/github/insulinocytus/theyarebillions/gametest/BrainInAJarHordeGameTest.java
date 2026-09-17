@@ -1,5 +1,8 @@
 package io.github.insulinocytus.theyarebillions.gametest;
 
+import com.mojang.authlib.GameProfile;
+import io.netty.channel.embedded.EmbeddedChannel;
+
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -9,6 +12,9 @@ import io.github.insulinocytus.theyarebillions.HordeZombie;
 import io.github.insulinocytus.theyarebillions.TheyAreBillions;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.NbtUtils;
+import net.minecraft.nbt.Tag;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.TicketType;
@@ -16,7 +22,13 @@ import net.minecraft.world.Difficulty;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.network.Connection;
+import net.minecraft.network.protocol.PacketFlow;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.network.CommonListenerCookie;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.block.Blocks;
@@ -25,6 +37,7 @@ import net.minecraft.world.phys.AABB;
 
 public final class BrainInAJarHordeGameTest {
     private static final BlockPos REMOTE_BRAIN = new BlockPos(96, 2, 0);
+    private static final BlockPos TARGET_TEST_BRAIN = new BlockPos(8, 2, 0);
     private static final int TEST_SIMULATION_DISTANCE = 6;
     private static final int LIGHT_GRID_STEP = 8;
     private static final double SECTOR_TANGENT = Math.tan(Math.toRadians(22.5));
@@ -432,7 +445,7 @@ public final class BrainInAJarHordeGameTest {
             .thenWaitUntil(() -> helper.assertTrue(
                 !level.areEntitiesLoaded(remoteChunk.toLong()), "The remote ownership chunk did not unload"
             ))
-            .thenIdle(1)
+            .thenIdle(20)
             .thenExecute(() -> {
                 var probe = EntityType.ARMOR_STAND.create(level);
                 helper.assertTrue(probe != null, "Could not create the UUID ownership probe");
@@ -463,6 +476,210 @@ public final class BrainInAJarHordeGameTest {
             .thenWaitUntil(() -> helper.assertTrue(
                 hordeZombies(level, localQuery).size() == 300 && hordeZombies(level, remoteQuery).isEmpty(),
                 "A tracked but non-ticking zombie rejoined and exceeded its Brain's 300-zombie budget"
+            ))
+            .thenExecute(cleanup)
+            .thenSucceed();
+    }
+
+    public static void verifyTargetingStateMachine(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var server = level.getServer();
+        var gameRules = level.getGameRules();
+        boolean originalMobSpawning = gameRules.getBoolean(GameRules.RULE_DOMOBSPAWNING);
+        boolean originalMobGriefing = gameRules.getBoolean(GameRules.RULE_MOBGRIEFING);
+        BlockPos brainPos = helper.absolutePos(TARGET_TEST_BRAIN);
+        BlockPos turtleEggPos = brainPos.offset(8, 0, 1);
+        Difficulty originalDifficulty = level.getDifficulty();
+        int originalSimulationDistance = server.getPlayerList().getSimulationDistance();
+        AABB query = new AABB(brainPos).inflate(144.0, 48.0, 144.0);
+        HordeZombie[] zombie = {null};
+        double[] initialBrainDistance = {0.0};
+        ServerPlayer[] nearest = {null};
+        ServerPlayer[] farther = {null};
+        ServerPlayer[] creative = {null};
+        ServerPlayer[] spectator = {null};
+
+        server.getPlayerList().setSimulationDistance(TEST_SIMULATION_DISTANCE);
+        level.getChunk(brainPos);
+        server.setDifficulty(Difficulty.HARD, true);
+        gameRules.getRule(GameRules.RULE_MOBGRIEFING).set(true, server);
+        gameRules.getRule(GameRules.RULE_DOMOBSPAWNING).set(false, server);
+        level.setDayTime(18000L);
+
+        Runnable cleanup = () -> {
+            removeTestPlayer(server, nearest[0]);
+            removeTestPlayer(server, farther[0]);
+            removeTestPlayer(server, creative[0]);
+            removeTestPlayer(server, spectator[0]);
+            hordeZombies(level, query).forEach(Entity::discard);
+            level.removeBlock(brainPos, false);
+            clearTargetArena(level, brainPos);
+            gameRules.getRule(GameRules.RULE_MOBGRIEFING).set(originalMobGriefing, server);
+            gameRules.getRule(GameRules.RULE_DOMOBSPAWNING).set(originalMobSpawning, server);
+            server.setDifficulty(originalDifficulty, true);
+            server.getPlayerList().setSimulationDistance(originalSimulationDistance);
+        };
+        helper.runAtTickTime(1599, cleanup);
+
+        helper.startSequence()
+            .thenIdle(1)
+            .thenExecute(() -> {
+                prepareTargetArena(level, brainPos);
+                level.setBlockAndUpdate(brainPos, TheyAreBillions.BRAIN_IN_A_JAR_BLOCK.get().defaultBlockState());
+                level.setBlockAndUpdate(turtleEggPos, Blocks.TURTLE_EGG.defaultBlockState());
+            })
+            .thenIdle(20)
+            .thenExecute(() -> {
+                zombie[0] = createOwnedHordeZombie(helper, level, brainPos, brainPos.offset(8, 0, 0));
+                initialBrainDistance[0] = zombie[0].distanceToSqr(brainPos.getCenter());
+                gameRules.getRule(GameRules.RULE_DOMOBSPAWNING).set(false, server);
+            })
+            .thenWaitUntil(() -> helper.assertTrue(
+                zombie[0].distanceToSqr(brainPos.getCenter()) < initialBrainDistance[0],
+                "An owned horde zombie did not move toward its Brain"
+            ))
+            .thenIdle(100)
+            .thenExecute(() -> assertWithCleanup(
+                helper,
+                cleanup,
+                level.getBlockState(turtleEggPos).is(Blocks.TURTLE_EGG),
+                "An owned horde zombie broke a block on its route to the Brain"
+            ))
+            .thenExecute(() -> {
+                BlockPos zombiePos = zombie[0].blockPosition();
+                creative[0] = addTestPlayer(level, "target-creative", GameType.CREATIVE, zombiePos.offset(2, 0, 0));
+                spectator[0] = addTestPlayer(level, "target-spectator", GameType.SPECTATOR, zombiePos.offset(3, 0, 0));
+                nearest[0] = addTestPlayer(level, "target-nearest", GameType.SURVIVAL, zombiePos.offset(8, 0, 0));
+                farther[0] = addTestPlayer(level, "target-farther", GameType.SURVIVAL, zombiePos.offset(12, 0, 0));
+                zombie[0].getAttribute(Attributes.ATTACK_DAMAGE).setBaseValue(0.0);
+                assertWithCleanup(
+                    helper,
+                    cleanup,
+                    level.getBlockState(brainPos).is(TheyAreBillions.BRAIN_IN_A_JAR_BLOCK.get()),
+                    "An owned horde zombie broke its Brain"
+                );
+            })
+            .thenWaitUntil(() -> helper.assertTrue(
+                zombie[0].getTarget() == nearest[0],
+                "The owned horde zombie did not choose the nearest attackable player"
+            ))
+            .thenExecute(() -> farther[0].moveTo(
+                zombie[0].getX() + 1.0, zombie[0].getY(), zombie[0].getZ(), farther[0].getYRot(), farther[0].getXRot()
+            ))
+            .thenExecuteFor(20, () -> assertWithCleanup(
+                helper,
+                cleanup,
+                zombie[0].getTarget() == nearest[0],
+                "The owned horde zombie switched to a closer player"
+            ))
+            .thenExecute(() -> nearest[0].moveTo(
+                zombie[0].getX() + 25.0, zombie[0].getY(), zombie[0].getZ(), nearest[0].getYRot(), nearest[0].getXRot()
+            ))
+            .thenWaitUntil(() -> helper.assertTrue(zombie[0].getTarget() == null, "An out-of-range player remained targeted"))
+            .thenExecuteFor(99, () -> assertWithCleanup(
+                helper,
+                cleanup,
+                zombie[0].getTarget() == null,
+                "The owned horde zombie reacquired a player before the 100-tick cooldown elapsed"
+            ))
+            .thenWaitUntil(() -> helper.assertTrue(
+                zombie[0].getTarget() == farther[0],
+                "The owned horde zombie did not reacquire a player after the cooldown"
+            ))
+            .thenExecute(() -> setTestGameType(farther[0], GameType.CREATIVE))
+            .thenWaitUntil(() -> helper.assertTrue(
+                zombie[0].getTarget() == null,
+                "A player that became unattackable remained targeted"
+            ))
+            .thenExecute(() -> setTestGameType(farther[0], GameType.SURVIVAL))
+            .thenIdle(100)
+            .thenWaitUntil(() -> helper.assertTrue(
+                zombie[0].getTarget() == farther[0],
+                "The owned horde zombie did not reacquire an attackable player"
+            ))
+            .thenExecute(() -> farther[0].kill())
+            .thenWaitUntil(() -> helper.assertTrue(
+                zombie[0].getTarget() == null,
+                "A dead player remained targeted"
+            ))
+            .thenExecute(cleanup)
+            .thenSucceed();
+    }
+
+    public static void verifyLostOwnershipAndRebinding(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var server = level.getServer();
+        var gameRules = level.getGameRules();
+        boolean originalMobSpawning = gameRules.getBoolean(GameRules.RULE_DOMOBSPAWNING);
+        Difficulty originalDifficulty = level.getDifficulty();
+        BlockPos firstBrain = helper.absolutePos(TARGET_TEST_BRAIN);
+        int originalSimulationDistance = server.getPlayerList().getSimulationDistance();
+        BlockPos secondBrain = firstBrain.offset(96, 0, 0);
+        AABB query = new AABB(firstBrain).inflate(160.0, 48.0, 160.0);
+        HordeZombie[] zombie = {null};
+        ServerPlayer[] player = {null};
+
+        server.getPlayerList().setSimulationDistance(TEST_SIMULATION_DISTANCE);
+        level.getChunk(firstBrain);
+        level.getChunk(secondBrain);
+        server.setDifficulty(Difficulty.HARD, true);
+        gameRules.getRule(GameRules.RULE_DOMOBSPAWNING).set(false, server);
+        level.setDayTime(18000L);
+
+        Runnable cleanup = () -> {
+            removeTestPlayer(server, player[0]);
+            hordeZombies(level, query).forEach(Entity::discard);
+            level.removeBlock(firstBrain, false);
+            level.removeBlock(secondBrain, false);
+            clearTargetArena(level, firstBrain);
+            gameRules.getRule(GameRules.RULE_DOMOBSPAWNING).set(originalMobSpawning, server);
+            server.setDifficulty(originalDifficulty, true);
+            server.getPlayerList().setSimulationDistance(originalSimulationDistance);
+        };
+        helper.runAtTickTime(1599, cleanup);
+
+        helper.startSequence()
+            .thenIdle(1)
+            .thenExecute(() -> {
+                prepareTargetArena(level, firstBrain);
+                level.setBlockAndUpdate(firstBrain, TheyAreBillions.BRAIN_IN_A_JAR_BLOCK.get().defaultBlockState());
+            })
+            .thenIdle(20)
+            .thenExecute(() -> {
+                zombie[0] = createOwnedHordeZombie(helper, level, firstBrain, firstBrain.offset(8, 0, 0));
+                gameRules.getRule(GameRules.RULE_DOMOBSPAWNING).set(false, server);
+                player[0] = addTestPlayer(level, "unowned-target", GameType.SURVIVAL, firstBrain.offset(12, 1, 0));
+                zombie[0].getAttribute(Attributes.ATTACK_DAMAGE).setBaseValue(0.0);
+                level.destroyBlock(firstBrain, false);
+            })
+            .thenWaitUntil(() -> helper.assertTrue(
+                zombie[0].isAlive() && savedBrainPos(zombie[0]) == null,
+                "Destroying a Brain removed its horde zombie or left stale ownership"
+            ))
+            .thenWaitUntil(() -> helper.assertTrue(
+                zombie[0].getTarget() == player[0],
+                "An unowned horde zombie did not resume vanilla player targeting"
+            ))
+            .thenExecute(() -> {
+                player[0].moveTo(zombie[0].getX() + 200.0, zombie[0].getY(), zombie[0].getZ(), 0.0F, 0.0F);
+                zombie[0].checkDespawn();
+                assertWithCleanup(helper, cleanup, zombie[0].isAlive(), "A horde zombie despawned beyond 128 blocks");
+                removeTestPlayer(server, player[0]);
+                player[0] = null;
+                level.setDayTime(1000L);
+                level.setBlockAndUpdate(secondBrain, TheyAreBillions.BRAIN_IN_A_JAR_BLOCK.get().defaultBlockState());
+            })
+            .thenIdle(120)
+            .thenExecute(() -> assertWithCleanup(
+                helper,
+                cleanup,
+                savedBrainPos(zombie[0]) == null,
+                "An unowned horde zombie rebound during daytime"
+            ))
+            .thenExecute(() -> level.setDayTime(18000L))
+            .thenWaitUntil(() -> helper.assertTrue(
+                secondBrain.equals(savedBrainPos(zombie[0])),
+                "An unowned horde zombie did not join the nearest nighttime Brain"
             ))
             .thenExecute(cleanup)
             .thenSucceed();
@@ -500,6 +717,96 @@ public final class BrainInAJarHordeGameTest {
                 }
             }
         }
+    }
+
+    private static void prepareTargetArena(ServerLevel level, BlockPos brainPos) {
+        setTargetArena(level, brainPos, Blocks.STONE.defaultBlockState());
+    }
+
+    private static void clearTargetArena(ServerLevel level, BlockPos brainPos) {
+        setTargetArena(level, brainPos, Blocks.AIR.defaultBlockState());
+    }
+
+    private static void setTargetArena(ServerLevel level, BlockPos brainPos, BlockState floor) {
+        for (int x = -4; x <= 40; x++) {
+            for (int z = -4; z <= 4; z++) {
+                level.setBlock(brainPos.offset(x, -1, z), floor, 2);
+                level.setBlock(brainPos.offset(x, 0, z), Blocks.AIR.defaultBlockState(), 2);
+                level.setBlock(brainPos.offset(x, 1, z), Blocks.AIR.defaultBlockState(), 2);
+            }
+        }
+    }
+
+    private static HordeZombie createOwnedHordeZombie(
+        GameTestHelper helper, ServerLevel level, BlockPos brainPos, BlockPos zombiePos
+    ) {
+        var zombie = TheyAreBillions.HORDE_ZOMBIE_ENTITY_TYPE.get().create(level);
+        helper.assertTrue(
+            level.getBlockEntity(brainPos) instanceof io.github.insulinocytus.theyarebillions.BrainInAJarBlockEntity,
+            "The horde zombie probe has no Brain"
+        );
+        var brain = (io.github.insulinocytus.theyarebillions.BrainInAJarBlockEntity) level.getBlockEntity(brainPos);
+        CompoundTag brainTag = brain.saveWithoutMetadata(level.registryAccess());
+        ListTag owned = brainTag.getList("OwnedHordeZombies", Tag.TAG_INT_ARRAY);
+        owned.add(NbtUtils.createUUID(zombie.getUUID()));
+        brainTag.put("OwnedHordeZombies", owned);
+        brain.loadCustomOnly(brainTag, level.registryAccess());
+
+        CompoundTag zombieTag = zombie.saveWithoutId(new CompoundTag());
+        zombieTag.putLong("BrainPos", brainPos.asLong());
+        zombie.load(zombieTag);
+        zombie.moveTo(zombiePos.getX() + 0.5, zombiePos.getY(), zombiePos.getZ() + 0.5, 0.0F, 0.0F);
+        helper.assertTrue(level.addFreshEntity(zombie), "Could not add a horde zombie probe");
+        return zombie;
+    }
+
+    private static ServerPlayer addTestPlayer(ServerLevel level, String name, GameType gameType, BlockPos pos) {
+        var cookie = CommonListenerCookie.createInitial(new GameProfile(UUID.randomUUID(), name), false);
+        var player = new TestServerPlayer(level, cookie, gameType);
+        var connection = new Connection(PacketFlow.SERVERBOUND);
+        new EmbeddedChannel(connection);
+        level.getServer().getPlayerList().placeNewPlayer(connection, player, cookie);
+        player.moveTo(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5, 0.0F, 0.0F);
+        setTestGameType(player, gameType);
+        player.setHealth(player.getMaxHealth());
+        player.setNoGravity(true);
+        return player;
+    }
+
+    private static void setTestGameType(ServerPlayer player, GameType gameType) {
+        ((TestServerPlayer) player).gameType = gameType;
+        player.getAbilities().invulnerable = gameType.isCreative();
+    }
+
+    private static void removeTestPlayer(net.minecraft.server.MinecraftServer server, ServerPlayer player) {
+        if (player != null && server.getPlayerList().getPlayer(player.getUUID()) == player) {
+            server.getPlayerList().remove(player);
+        }
+    }
+
+    private static final class TestServerPlayer extends ServerPlayer {
+        private GameType gameType;
+
+        private TestServerPlayer(ServerLevel level, CommonListenerCookie cookie, GameType gameType) {
+            super(level.getServer(), level, cookie.gameProfile(), cookie.clientInformation());
+            this.gameType = gameType;
+            this.getAbilities().invulnerable = gameType.isCreative();
+        }
+
+        @Override
+        public boolean isSpectator() {
+            return this.gameType == GameType.SPECTATOR;
+        }
+
+        @Override
+        public boolean isCreative() {
+            return this.gameType == GameType.CREATIVE;
+        }
+    }
+
+    private static BlockPos savedBrainPos(HordeZombie zombie) {
+        CompoundTag tag = zombie.saveWithoutId(new CompoundTag());
+        return tag.contains("BrainPos") ? BlockPos.of(tag.getLong("BrainPos")) : null;
     }
 
     private static List<HordeZombie> hordeZombies(ServerLevel level, AABB query) {
