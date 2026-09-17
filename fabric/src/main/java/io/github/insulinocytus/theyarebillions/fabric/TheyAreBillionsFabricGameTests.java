@@ -39,6 +39,16 @@ public final class TheyAreBillionsFabricGameTests {
         BrainInAJarHordeGameTest.verifyRemoteOwnershipRecovery(helper);
     }
 
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE, batch = "brain_in_a_jar_horde_targeting", timeoutTicks = 1600)
+    public void brainInAJarHordeTargeting(GameTestHelper helper) {
+        BrainInAJarHordeGameTest.verifyTargetingStateMachine(helper);
+    }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE, batch = "brain_in_a_jar_horde_rebinding", timeoutTicks = 1600)
+    public void brainInAJarHordeRebinding(GameTestHelper helper) {
+        BrainInAJarHordeGameTest.verifyLostOwnershipAndRebinding(helper);
+    }
+
     @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
     public void hordeZombie(GameTestHelper helper) {
         HordeZombieGameTest.verify(helper);

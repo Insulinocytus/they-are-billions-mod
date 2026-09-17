@@ -1,5 +1,7 @@
 package io.github.insulinocytus.theyarebillions;
 
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
@@ -41,6 +43,7 @@ public final class BrainInAJarBlockEntity extends BlockEntity {
     private static final double MAX_SPAWN_DISTANCE = 128.0;
     private static final double HALF_SECTOR_ANGLE = Math.toRadians(22.5);
     private static final double SECTOR_TANGENT = Math.tan(HALF_SECTOR_ANGLE);
+    private static final Set<BrainInAJarBlockEntity> LOADED_BRAINS = Collections.newSetFromMap(new IdentityHashMap<>());
 
     private boolean ownsForcedChunk;
     private int appliedTicketRadius;
@@ -53,10 +56,23 @@ public final class BrainInAJarBlockEntity extends BlockEntity {
         super(TheyAreBillions.BRAIN_IN_A_JAR_BLOCK_ENTITY_TYPE.get(), pos, state);
     }
 
+    @Override
+    public void clearRemoved() {
+        super.clearRemoved();
+        this.registerLoadedBrain();
+    }
+
+    @Override
+    public void setRemoved() {
+        LOADED_BRAINS.remove(this);
+        super.setRemoved();
+    }
+
     public static void serverTick(Level level, BlockPos pos, BlockState state, BrainInAJarBlockEntity brain) {
         if (!(level instanceof ServerLevel serverLevel) || !level.dimension().equals(Level.OVERWORLD)) {
             return;
         }
+        brain.registerLoadedBrain();
         HordeZombie.validatePendingOwnershipBeforeBrainTick(serverLevel);
 
         brain.updateTickets(serverLevel, pos);
@@ -88,6 +104,7 @@ public final class BrainInAJarBlockEntity extends BlockEntity {
         if (!level.dimension().equals(Level.OVERWORLD)) {
             return;
         }
+        LOADED_BRAINS.remove(this);
 
         var chunk = new ChunkPos(this.worldPosition);
         if (this.appliedTicketRadius != 0) {
@@ -97,11 +114,20 @@ public final class BrainInAJarBlockEntity extends BlockEntity {
         if (this.ownsForcedChunk) {
             level.setChunkForced(chunk.x, chunk.z, false);
             this.ownsForcedChunk = false;
-            this.setChanged();
         }
+        for (UUID zombieId : this.ownedHordeZombies) {
+            if (level.getEntity(zombieId) instanceof HordeZombie zombie) {
+                zombie.abandonBrain(this.worldPosition);
+            }
+        }
+        if (!this.ownedHordeZombies.isEmpty()) {
+            this.ownedHordeZombies.clear();
+        }
+        this.setChanged();
     }
 
     void updateTickets(ServerLevel level, BlockPos pos) {
+        this.registerLoadedBrain();
         var chunk = new ChunkPos(pos);
         if (!level.getForcedChunks().contains(chunk.toLong())) {
             level.setChunkForced(chunk.x, chunk.z, true);
@@ -118,6 +144,47 @@ public final class BrainInAJarBlockEntity extends BlockEntity {
         }
         level.getChunkSource().addRegionTicket(TICKET, chunk, radius, pos);
         this.appliedTicketRadius = radius;
+    }
+
+    static @Nullable BrainInAJarBlockEntity findNearestAvailable(ServerLevel level, BlockPos origin, int range) {
+        BrainInAJarBlockEntity nearest = null;
+        double nearestDistance = (double) range * range;
+        for (BrainInAJarBlockEntity brain : LOADED_BRAINS) {
+            if (brain.level != level || brain.isRemoved() || !brain.hasHordeCapacity()) {
+                continue;
+            }
+            BlockPos brainPos = brain.getBlockPos();
+            double dx = brainPos.getX() - origin.getX();
+            double dz = brainPos.getZ() - origin.getZ();
+            double distance = dx * dx + dz * dz;
+            if (distance <= nearestDistance) {
+                nearest = brain;
+                nearestDistance = distance;
+            }
+        }
+        return nearest;
+    }
+
+    private void registerLoadedBrain() {
+        if (this.level instanceof ServerLevel serverLevel && serverLevel.dimension().equals(Level.OVERWORLD)) {
+            LOADED_BRAINS.add(this);
+        }
+    }
+
+    boolean hasHordeCapacity() {
+        return this.ownedHordeZombies.size() < MAX_HORDE_SIZE;
+    }
+
+    boolean tryClaimHordeZombie(UUID zombieId) {
+        if (this.ownedHordeZombies.contains(zombieId)) {
+            return true;
+        }
+        if (!this.hasHordeCapacity()) {
+            return false;
+        }
+        this.ownedHordeZombies.add(zombieId);
+        this.setChanged();
+        return true;
     }
 
     boolean ownsHordeZombie(UUID zombieId) {
@@ -186,12 +253,13 @@ public final class BrainInAJarBlockEntity extends BlockEntity {
             return;
         }
         zombie.finalizeSpawn(level, level.getCurrentDifficultyAt(candidate), MobSpawnType.EVENT, null);
-        this.ownedHordeZombies.add(zombie.getUUID());
-        if (!level.addFreshEntity(zombie)) {
-            this.ownedHordeZombies.remove(zombie.getUUID());
+        if (!this.tryClaimHordeZombie(zombie.getUUID())) {
             return;
         }
-        this.setChanged();
+        if (!level.addFreshEntity(zombie)) {
+            this.releaseHordeZombie(zombie.getUUID());
+            return;
+        }
     }
 
     @Override
