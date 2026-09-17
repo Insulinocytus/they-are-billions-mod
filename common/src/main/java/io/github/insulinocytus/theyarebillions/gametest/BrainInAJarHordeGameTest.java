@@ -43,6 +43,7 @@ public final class BrainInAJarHordeGameTest {
     private static final BlockPos REMOTE_BRAIN = new BlockPos(96, 2, 0);
     private static final BlockPos TARGET_TEST_BRAIN = new BlockPos(8, 2, 0);
     private static final int TEST_SIMULATION_DISTANCE = 6;
+    private static final int PROBE_TICKET_RADIUS = 3;
     private static final int LIGHT_GRID_STEP = 8;
     private static final double SECTOR_TANGENT = Math.tan(Math.toRadians(22.5));
 
@@ -726,14 +727,11 @@ public final class BrainInAJarHordeGameTest {
         HordeZombie[] currentTerminal = {null};
 
         var decayEffect = BuiltInRegistries.MOB_EFFECT.getHolderOrThrow(TheyAreBillions.DECAY.getKey());
+        BlockPos probeTicketPos = probeOrigin;
+        var probeTicket = TicketType.create("they_are_billions:test_sunrise_probes", BlockPos::compareTo);
         server.getPlayerList().setSimulationDistance(TEST_SIMULATION_DISTANCE);
+        level.getChunkSource().addRegionTicket(probeTicket, new ChunkPos(probeTicketPos), PROBE_TICKET_RADIUS, probeTicketPos);
         level.getChunk(brainPos);
-        for (BlockPos position : protectedPositions) {
-            level.getChunk(position);
-        }
-        level.getChunk(shelteredPos);
-        level.getChunk(terminalPos);
-        level.getChunk(currentTerminalPos);
         prepareSpawnArea(level, brainPos, false);
         server.setDifficulty(Difficulty.HARD, true);
         gameRules.getRule(GameRules.RULE_DOMOBSPAWNING).set(true, server);
@@ -758,6 +756,9 @@ public final class BrainInAJarHordeGameTest {
                 currentTerminal[0].discard();
             }
             hordeZombies(level, query).forEach(Entity::discard);
+            level.getChunkSource().removeRegionTicket(
+                probeTicket, new ChunkPos(probeTicketPos), PROBE_TICKET_RADIUS, probeTicketPos
+            );
             level.removeBlock(brainPos, false);
             clearSpawnArea(level, brainPos, false);
             for (BlockPos position : protectedPositions) {
@@ -806,6 +807,7 @@ public final class BrainInAJarHordeGameTest {
                 level.setBlock(protectedPositions[4], Blocks.BUBBLE_COLUMN.defaultBlockState(), 2);
             })
             .thenWaitUntil(() -> {
+                helper.assertTrue(level.isPositionEntityTicking(shelteredPos), "The daylight probe area is not entity ticking");
                 for (BlockPos position : protectedPositions) {
                     helper.assertTrue(level.canSeeSky(position.above()), "An exposed daylight probe is sheltered");
                 }

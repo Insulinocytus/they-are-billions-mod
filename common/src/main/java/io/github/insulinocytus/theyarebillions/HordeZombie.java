@@ -195,7 +195,7 @@ public final class HordeZombie extends Zombie {
             return;
         }
         this.rebindCooldown = REBIND_INTERVAL;
-        if (!level.dimension().equals(Level.OVERWORLD) || !level.isNight()) {
+        if (!level.dimension().equals(Level.OVERWORLD) || isWeatherIndependentDay(level)) {
             return;
         }
 
