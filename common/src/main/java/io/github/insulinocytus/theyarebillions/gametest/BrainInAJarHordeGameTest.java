@@ -11,6 +11,7 @@ import java.util.UUID;
 import io.github.insulinocytus.theyarebillions.HordeZombie;
 import io.github.insulinocytus.theyarebillions.TheyAreBillions;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtUtils;
@@ -20,6 +21,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.TicketType;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.network.Connection;
@@ -28,6 +30,8 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.CommonListenerCookie;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.level.GameRules;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
@@ -618,6 +622,7 @@ public final class BrainInAJarHordeGameTest {
         AABB query = new AABB(firstBrain).inflate(160.0, 48.0, 160.0);
         HordeZombie[] zombie = {null};
         ServerPlayer[] player = {null};
+        BlockPos[] shelterRoof = {null};
 
         server.getPlayerList().setSimulationDistance(TEST_SIMULATION_DISTANCE);
         level.getChunk(firstBrain);
@@ -632,6 +637,9 @@ public final class BrainInAJarHordeGameTest {
             level.removeBlock(firstBrain, false);
             level.removeBlock(secondBrain, false);
             clearTargetArena(level, firstBrain);
+            if (shelterRoof[0] != null) {
+                level.removeBlock(shelterRoof[0], false);
+            }
             gameRules.getRule(GameRules.RULE_DOMOBSPAWNING).set(originalMobSpawning, server);
             server.setDifficulty(originalDifficulty, true);
             server.getPlayerList().setSimulationDistance(originalSimulationDistance);
@@ -666,6 +674,9 @@ public final class BrainInAJarHordeGameTest {
                 assertWithCleanup(helper, cleanup, zombie[0].isAlive(), "A horde zombie despawned beyond 128 blocks");
                 removeTestPlayer(server, player[0]);
                 player[0] = null;
+                zombie[0].setNoAi(true);
+                shelterRoof[0] = BlockPos.containing(zombie[0].getX(), zombie[0].getEyeY(), zombie[0].getZ()).above();
+                level.setBlock(shelterRoof[0], Blocks.STONE.defaultBlockState(), 2);
                 level.setDayTime(1000L);
                 level.setBlockAndUpdate(secondBrain, TheyAreBillions.BRAIN_IN_A_JAR_BLOCK.get().defaultBlockState());
             })
@@ -680,6 +691,235 @@ public final class BrainInAJarHordeGameTest {
             .thenWaitUntil(() -> helper.assertTrue(
                 secondBrain.equals(savedBrainPos(zombie[0])),
                 "An unowned horde zombie did not join the nearest nighttime Brain"
+            ))
+            .thenExecute(cleanup)
+            .thenSucceed();
+    }
+
+    public static void verifySunriseCleanup(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var server = level.getServer();
+        var gameRules = level.getGameRules();
+        boolean originalMobSpawning = gameRules.getBoolean(GameRules.RULE_DOMOBSPAWNING);
+        Difficulty originalDifficulty = level.getDifficulty();
+        int originalSimulationDistance = server.getPlayerList().getSimulationDistance();
+        long originalDayTime = level.getDayTime();
+        float originalRainLevel = level.getRainLevel(1.0F);
+        float originalThunderLevel = level.getThunderLevel(1.0F);
+        BlockPos brainPos = helper.absolutePos(REMOTE_BRAIN);
+        BlockPos probeOrigin = helper.absolutePos(TARGET_TEST_BRAIN.offset(0, 2, 8));
+        AABB query = new AABB(brainPos).inflate(144.0, 48.0, 144.0);
+        BlockPos[] protectedPositions = {
+            probeOrigin,
+            probeOrigin.offset(3, 0, 0),
+            probeOrigin.offset(6, 0, 0),
+            probeOrigin.offset(9, 0, 0),
+            probeOrigin.offset(12, 0, 0),
+            probeOrigin.offset(15, 0, 0)
+        };
+        BlockPos shelteredPos = probeOrigin.offset(0, 0, 3);
+        BlockPos terminalPos = probeOrigin.offset(3, 0, 3);
+        BlockPos currentTerminalPos = probeOrigin.offset(6, 0, 3);
+        HordeZombie[] protectedZombies = new HordeZombie[protectedPositions.length];
+        HordeZombie[] sheltered = {null};
+        HordeZombie[] terminal = {null};
+        HordeZombie[] currentTerminal = {null};
+
+        var decayEffect = BuiltInRegistries.MOB_EFFECT.getHolderOrThrow(TheyAreBillions.DECAY.getKey());
+        server.getPlayerList().setSimulationDistance(TEST_SIMULATION_DISTANCE);
+        level.getChunk(brainPos);
+        for (BlockPos position : protectedPositions) {
+            level.getChunk(position);
+        }
+        level.getChunk(shelteredPos);
+        level.getChunk(terminalPos);
+        level.getChunk(currentTerminalPos);
+        prepareSpawnArea(level, brainPos, false);
+        server.setDifficulty(Difficulty.HARD, true);
+        gameRules.getRule(GameRules.RULE_DOMOBSPAWNING).set(true, server);
+        hordeZombies(level, query).forEach(Entity::discard);
+        level.setDayTime(18000L);
+        level.updateSkyBrightness();
+        level.setBlockAndUpdate(brainPos, TheyAreBillions.BRAIN_IN_A_JAR_BLOCK.get().defaultBlockState());
+
+        Runnable cleanup = () -> {
+            for (HordeZombie zombie : protectedZombies) {
+                if (zombie != null) {
+                    zombie.discard();
+                }
+            }
+            if (sheltered[0] != null) {
+                sheltered[0].discard();
+            }
+            if (terminal[0] != null) {
+                terminal[0].discard();
+            }
+            if (currentTerminal[0] != null) {
+                currentTerminal[0].discard();
+            }
+            hordeZombies(level, query).forEach(Entity::discard);
+            level.removeBlock(brainPos, false);
+            clearSpawnArea(level, brainPos, false);
+            for (BlockPos position : protectedPositions) {
+                level.removeBlock(position, false);
+                level.removeBlock(position.below(), false);
+            }
+            level.removeBlock(shelteredPos.above(2), false);
+            level.removeBlock(terminalPos.above(2), false);
+            level.removeBlock(currentTerminalPos.above(2), false);
+            level.removeBlock(shelteredPos.below(), false);
+            level.removeBlock(terminalPos.below(), false);
+            level.removeBlock(currentTerminalPos.below(), false);
+            level.setRainLevel(originalRainLevel);
+            level.setThunderLevel(originalThunderLevel);
+            gameRules.getRule(GameRules.RULE_DOMOBSPAWNING).set(originalMobSpawning, server);
+            server.setDifficulty(originalDifficulty, true);
+            server.getPlayerList().setSimulationDistance(originalSimulationDistance);
+            level.setDayTime(originalDayTime);
+            level.updateSkyBrightness();
+        };
+        helper.runAtTickTime(799, cleanup);
+
+        helper.startSequence()
+            .thenWaitUntil(() -> helper.assertTrue(
+                !hordeZombies(level, query).isEmpty(),
+                "A nighttime Brain did not create a horde zombie before sunrise"
+            ))
+            .thenExecute(() -> {
+                gameRules.getRule(GameRules.RULE_DOMOBSPAWNING).set(false, server);
+                hordeZombies(level, query).forEach(Entity::discard);
+                level.setDayTime(23460L);
+                level.updateSkyBrightness();
+                for (int index = 0; index < protectedPositions.length; index++) {
+                    level.setBlock(protectedPositions[index].below(), Blocks.STONE.defaultBlockState(), 2);
+                }
+                level.setBlock(shelteredPos.below(), Blocks.STONE.defaultBlockState(), 2);
+                level.setBlock(shelteredPos.above(2), Blocks.STONE.defaultBlockState(), 2);
+                level.setBlock(terminalPos.above(2), Blocks.STONE.defaultBlockState(), 2);
+                level.setBlock(terminalPos.below(), Blocks.STONE.defaultBlockState(), 2);
+                level.setBlock(currentTerminalPos.above(2), Blocks.STONE.defaultBlockState(), 2);
+                level.setBlock(currentTerminalPos.below(), Blocks.STONE.defaultBlockState(), 2);
+                level.setBlock(protectedPositions[3], Blocks.WATER.defaultBlockState(), 2);
+                level.setBlock(protectedPositions[5], Blocks.POWDER_SNOW.defaultBlockState(), 2);
+                level.setRainLevel(1.0F);
+                level.updateSkyBrightness();
+                level.setBlock(protectedPositions[4], Blocks.BUBBLE_COLUMN.defaultBlockState(), 2);
+            })
+            .thenWaitUntil(() -> {
+                for (BlockPos position : protectedPositions) {
+                    helper.assertTrue(level.canSeeSky(position.above()), "An exposed daylight probe is sheltered");
+                }
+                helper.assertTrue(!level.canSeeSky(shelteredPos.above()), "The decay probe is not sheltered");
+                helper.assertTrue(!level.canSeeSky(terminalPos.above()), "The terminal decay probe is not sheltered");
+                helper.assertTrue(!level.canSeeSky(currentTerminalPos.above()), "The current-health decay probe is not sheltered");
+                helper.assertTrue(level.isRainingAt(protectedPositions[2]), "The rain protection probe is not standing in rain");
+                helper.assertTrue(level.isNight(), "The rain probe did not exercise weather-darkened daytime");
+            })
+            .thenExecute(() -> {
+                level.setDayTime(23460L);
+                for (int index = 0; index < protectedPositions.length; index++) {
+                    protectedZombies[index] = createHordeZombie(helper, level, protectedPositions[index]);
+                }
+                protectedZombies[1].setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.DIAMOND_HELMET));
+                sheltered[0] = createHordeZombie(helper, level, shelteredPos);
+                terminal[0] = createHordeZombie(helper, level, terminalPos);
+                currentTerminal[0] = createHordeZombie(helper, level, currentTerminalPos);
+
+                for (int index = 0; index < protectedZombies.length; index++) {
+                    HordeZombie zombie = protectedZombies[index];
+                    assertWithCleanup(
+                        helper,
+                        cleanup,
+                        level.canSeeSky(BlockPos.containing(zombie.getX(), zombie.getEyeY(), zombie.getZ())),
+                        "Exposed horde zombie probe has no sky access: " + index
+                    );
+                    level.tickNonPassenger(zombie);
+                    assertWithCleanup(
+                        helper,
+                        cleanup,
+                        zombie.isDeadOrDying(),
+                        "Daylight did not kill exposed horde zombie probe " + index
+                    );
+                }
+                level.tickNonPassenger(sheltered[0]);
+                level.tickNonPassenger(terminal[0]);
+                level.tickNonPassenger(currentTerminal[0]);
+
+                var decay = sheltered[0].getEffect(decayEffect);
+                var terminalDecay = terminal[0].getEffect(decayEffect);
+                var currentTerminalDecay = currentTerminal[0].getEffect(decayEffect);
+                assertWithCleanup(
+                    helper,
+                    cleanup,
+                    decay != null
+                        && terminalDecay != null
+                        && currentTerminalDecay != null
+                        && decay.isInfiniteDuration()
+                        && !decay.isAmbient()
+                        && !decay.isVisible()
+                        && !decay.showIcon(),
+                    "A sheltered horde zombie did not receive invisible, non-ambient infinite decay"
+                );
+
+                sheltered[0].getAttribute(Attributes.MAX_HEALTH).setBaseValue(5.0);
+                sheltered[0].setHealth(5.0F);
+                sheltered[0].tickCount = 18;
+                level.tickNonPassenger(sheltered[0]);
+                assertWithCleanup(
+                    helper,
+                    cleanup,
+                    sheltered[0].getAttributeBaseValue(Attributes.MAX_HEALTH) == 5.0 && sheltered[0].getHealth() == 5.0F,
+                    "Decay applied before its 20-tick interval"
+                );
+                sheltered[0].tickCount = 19;
+                level.tickNonPassenger(sheltered[0]);
+                assertWithCleanup(
+                    helper,
+                    cleanup,
+                    sheltered[0].getAttributeBaseValue(Attributes.MAX_HEALTH) == 4.0 && sheltered[0].getHealth() == 4.0F,
+                    "Decay did not reduce maximum and current health after 20 ticks"
+                );
+
+                terminal[0].getAttribute(Attributes.MAX_HEALTH).setBaseValue(1.0);
+                terminal[0].setHealth(1.0F);
+                terminal[0].tickCount = 19;
+                level.tickNonPassenger(terminal[0]);
+                assertWithCleanup(helper, cleanup, terminal[0].isDeadOrDying(), "Decay did not kill at its minimum health");
+
+                currentTerminal[0].getAttribute(Attributes.MAX_HEALTH).setBaseValue(5.0);
+                currentTerminal[0].setHealth(1.0F);
+                currentTerminal[0].tickCount = 19;
+                level.tickNonPassenger(currentTerminal[0]);
+                assertWithCleanup(
+                    helper,
+                    cleanup,
+                    currentTerminal[0].isDeadOrDying(),
+                    "Decay did not kill when current health reached its minimum"
+                );
+
+                level.setDayTime(18000L);
+                level.updateSkyBrightness();
+                sheltered[0].tickCount = 39;
+                level.tickNonPassenger(sheltered[0]);
+                assertWithCleanup(
+                    helper,
+                    cleanup,
+                    sheltered[0].getAttributeBaseValue(Attributes.MAX_HEALTH) == 3.0
+                        && sheltered[0].getHealth() == 3.0F
+                        && sheltered[0].hasEffect(decayEffect),
+                    "Nightfall removed decay or stopped its 20-tick health loss"
+                );
+                level.setDayTime(23460L);
+                level.updateSkyBrightness();
+                gameRules.getRule(GameRules.RULE_DOMOBSPAWNING).set(true, server);
+                hordeZombies(level, query).forEach(Entity::discard);
+            })
+            .thenIdle(100)
+            .thenExecute(() -> assertWithCleanup(
+                helper,
+                cleanup,
+                hordeZombies(level, query).isEmpty(),
+                "A Brain in a Jar refilled its horde after sunrise"
             ))
             .thenExecute(cleanup)
             .thenSucceed();
@@ -735,6 +975,19 @@ public final class BrainInAJarHordeGameTest {
                 level.setBlock(brainPos.offset(x, 1, z), Blocks.AIR.defaultBlockState(), 2);
             }
         }
+    }
+
+    private static HordeZombie createHordeZombie(
+        GameTestHelper helper, ServerLevel level, BlockPos zombiePos
+    ) {
+        var zombie = TheyAreBillions.HORDE_ZOMBIE_ENTITY_TYPE.get().create(level);
+        zombie.moveTo(zombiePos.getX() + 0.5, zombiePos.getY(), zombiePos.getZ() + 0.5, 0.0F, 0.0F);
+        zombie.setNoAi(true);
+        zombie.setNoGravity(true);
+        helper.assertTrue(zombie.validateOwnership(level), "The horde zombie probe has invalid ownership");
+        helper.assertTrue(level.addFreshEntity(zombie), "Could not add a horde zombie probe");
+        zombie.setDeltaMovement(0.0, 0.0, 0.0);
+        return zombie;
     }
 
     private static HordeZombie createOwnedHordeZombie(

@@ -8,10 +8,12 @@ import java.util.Set;
 import java.util.UUID;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.TickTask;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.DifficultyInstance;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
@@ -101,6 +103,17 @@ public final class HordeZombie extends Zombie {
             this.discard();
             return;
         }
+        if (level.dimension().equals(Level.OVERWORLD) && isWeatherIndependentDay(level)) {
+            if (level.canSeeSky(BlockPos.containing(this.getX(), this.getEyeY(), this.getZ()))) {
+                this.kill();
+                super.tick();
+                return;
+            }
+            var decay = BuiltInRegistries.MOB_EFFECT.getHolderOrThrow(TheyAreBillions.DECAY.getKey());
+            if (!this.hasEffect(decay)) {
+                this.addEffect(new MobEffectInstance(decay, -1, 0, false, false, false));
+            }
+        }
 
         super.tick();
         if (this.isRemoved()) {
@@ -111,6 +124,12 @@ public final class HordeZombie extends Zombie {
         } else {
             this.tickOwnedTarget(level);
         }
+    }
+
+    static boolean isWeatherIndependentDay(ServerLevel level) {
+        // Clear-weather Level.isDay() boundaries; weather must not change the horde lifecycle.
+        long dayTime = Math.floorMod(level.getDayTime(), 24000L);
+        return dayTime >= 23460L || dayTime <= 12540L;
     }
 
     private void tickOwnedTarget(ServerLevel level) {

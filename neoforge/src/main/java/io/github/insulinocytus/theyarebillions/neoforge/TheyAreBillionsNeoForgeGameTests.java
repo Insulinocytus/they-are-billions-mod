@@ -52,6 +52,11 @@ public final class TheyAreBillionsNeoForgeGameTests {
     public static void brainInAJarHordeRebinding(GameTestHelper helper) {
         BrainInAJarHordeGameTest.verifyLostOwnershipAndRebinding(helper);
     }
+    @GameTest(template = "empty", batch = "brain_in_a_jar_sunrise", timeoutTicks = 800, skyAccess = true)
+    public static void brainInAJarSunriseCleanup(GameTestHelper helper) {
+        BrainInAJarHordeGameTest.verifySunriseCleanup(helper);
+    }
+
 
     @GameTest(template = "empty")
     public static void hordeZombie(GameTestHelper helper) {

@@ -76,7 +76,7 @@ public final class BrainInAJarBlockEntity extends BlockEntity {
         HordeZombie.validatePendingOwnershipBeforeBrainTick(serverLevel);
 
         brain.updateTickets(serverLevel, pos);
-        if (!serverLevel.isNight()) {
+        if (HordeZombie.isWeatherIndependentDay(serverLevel)) {
             if (brain.wasNight) {
                 brain.wasNight = false;
                 brain.setChanged();

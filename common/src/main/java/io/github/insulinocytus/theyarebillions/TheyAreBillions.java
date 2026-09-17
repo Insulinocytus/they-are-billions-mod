@@ -12,6 +12,7 @@ import net.minecraft.world.entity.EntityAttachment;
 import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
+import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.CreativeModeTab;
@@ -28,6 +29,8 @@ public final class TheyAreBillions {
     public static final DeferredRegister<Item> ITEMS = DeferredRegister.create(MOD_ID, Registries.ITEM);
     public static final DeferredRegister<CreativeModeTab> TABS = DeferredRegister.create(MOD_ID, Registries.CREATIVE_MODE_TAB);
     public static final DeferredRegister<EntityType<?>> ENTITY_TYPES = DeferredRegister.create(MOD_ID, Registries.ENTITY_TYPE);
+    public static final DeferredRegister<MobEffect> MOB_EFFECTS = DeferredRegister.create(MOD_ID, Registries.MOB_EFFECT);
+    public static final RegistrySupplier<MobEffect> DECAY = MOB_EFFECTS.register("decay", DecayMobEffect::new);
     public static final RegistrySupplier<Block> BRAIN_IN_A_JAR_BLOCK = BLOCKS.register("brain_in_a_jar", BrainInAJarBlock::new);
     public static final RegistrySupplier<Item> BRAIN_IN_A_JAR_ITEM = ITEMS.register(
         "brain_in_a_jar", () -> new BlockItem(BRAIN_IN_A_JAR_BLOCK.get(), new Item.Properties())
@@ -66,6 +69,7 @@ public final class TheyAreBillions {
         ITEMS.register();
         TABS.register();
         ENTITY_TYPES.register();
+        MOB_EFFECTS.register();
         EntityAttributeRegistry.register(HORDE_ZOMBIE_ENTITY_TYPE, Zombie::createAttributes);
         TickEvent.SERVER_LEVEL_POST.register(HordeZombie::validatePendingOwnership);
         LifecycleEvent.SERVER_STOPPED.register(server -> HordeZombie.clearPendingOwnership());
