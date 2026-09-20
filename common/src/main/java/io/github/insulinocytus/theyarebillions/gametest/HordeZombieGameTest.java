@@ -249,9 +249,12 @@ public final class HordeZombieGameTest {
         zombie.setNoGravity(true);
         zombie.setHealth(10.0F);
         double initialMaxHealth = zombie.getAttributeBaseValue(Attributes.MAX_HEALTH);
+        var decayChunk = new net.minecraft.world.level.ChunkPos(zombie.blockPosition());
+        level.setChunkForced(decayChunk.x, decayChunk.z, true);
         int[] firstDecayTick = {0};
 
         Runnable cleanup = () -> {
+            level.setChunkForced(decayChunk.x, decayChunk.z, false);
             zombie.discard();
             level.getServer().setDifficulty(originalDifficulty, true);
         };
