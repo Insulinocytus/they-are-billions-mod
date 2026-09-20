@@ -239,6 +239,10 @@ public final class HordeZombieGameTest {
         };
         helper.runAtTickTime(199, cleanup);
         helper.startSequence()
+            .thenWaitUntil(() -> helper.assertTrue(
+                level.isPositionEntityTicking(zombie.blockPosition()),
+                "The covered horde zombie chunk did not become entity ticking"
+            ))
             .thenExecute(() -> {
                 level.getServer().setDifficulty(Difficulty.HARD, true);
                 level.setDayTime(1000L);
