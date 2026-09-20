@@ -14,12 +14,14 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.DifficultyInstance;
 import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.SpawnGroupData;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.goal.LookAtPlayerGoal;
 import net.minecraft.world.entity.ai.goal.RandomLookAroundGoal;
 import net.minecraft.world.entity.monster.Zombie;
@@ -41,6 +43,8 @@ public final class HordeZombie extends Zombie {
     private static final String PLAYER_TARGET_TAG = "PlayerTarget";
     private static final String PLAYER_RETARGET_COOLDOWN_TAG = "PlayerRetargetCooldown";
     private static final String REBIND_COOLDOWN_TAG = "RebindCooldown";
+    private static final String DECAY_TICKS_TAG = "DecayTicks";
+    private static final int DECAY_INTERVAL = 20;
     private static final int PLAYER_TARGET_RANGE = 24;
     private static final int PLAYER_RETARGET_COOLDOWN = 100;
     private static final int REBIND_INTERVAL = 100;
@@ -55,6 +59,7 @@ public final class HordeZombie extends Zombie {
     private @Nullable UUID playerTargetId;
     private int playerRetargetCooldown;
     private int rebindCooldown;
+    private int decayTicks;
 
     public HordeZombie(EntityType<? extends Zombie> entityType, Level level) {
         super(entityType, level);
@@ -101,6 +106,9 @@ public final class HordeZombie extends Zombie {
             this.discard();
             return;
         }
+        if (this.tickSunriseCleanup(level)) {
+            return;
+        }
 
         super.tick();
         if (this.isRemoved()) {
@@ -111,6 +119,46 @@ public final class HordeZombie extends Zombie {
         } else {
             this.tickOwnedTarget(level);
         }
+    }
+
+    private boolean tickSunriseCleanup(ServerLevel level) {
+        if (level.isDay()) {
+            BlockPos eyePos = BlockPos.containing(this.getX(), this.getEyeY(), this.getZ());
+            if (level.canSeeSky(eyePos)) {
+                this.kill();
+                return true;
+            }
+            if (!this.hasEffect(TheyAreBillions.decayEffect())) {
+                this.addEffect(new MobEffectInstance(
+                    TheyAreBillions.decayEffect(),
+                    MobEffectInstance.INFINITE_DURATION,
+                    0,
+                    false,
+                    false,
+                    false
+                ));
+                this.decayTicks = 0;
+            }
+        }
+        if (!this.hasEffect(TheyAreBillions.decayEffect())) {
+            this.decayTicks = 0;
+            return false;
+        }
+        if (++this.decayTicks < DECAY_INTERVAL) {
+            return false;
+        }
+
+        this.decayTicks = 0;
+        var maxHealth = this.getAttribute(Attributes.MAX_HEALTH);
+        double nextMaxHealth = maxHealth.getBaseValue() - 1.0;
+        float nextHealth = this.getHealth() - 1.0F;
+        if (nextMaxHealth <= 0.0 || nextHealth <= 0.0F) {
+            this.kill();
+            return true;
+        }
+        maxHealth.setBaseValue(nextMaxHealth);
+        this.setHealth(nextHealth);
+        return false;
     }
 
     private void tickOwnedTarget(ServerLevel level) {
@@ -343,6 +391,9 @@ public final class HordeZombie extends Zombie {
         if (this.rebindCooldown > 0) {
             tag.putInt(REBIND_COOLDOWN_TAG, this.rebindCooldown);
         }
+        if (this.decayTicks > 0) {
+            tag.putInt(DECAY_TICKS_TAG, this.decayTicks);
+        }
     }
 
     @Override
@@ -352,6 +403,7 @@ public final class HordeZombie extends Zombie {
         this.playerTargetId = tag.hasUUID(PLAYER_TARGET_TAG) ? tag.getUUID(PLAYER_TARGET_TAG) : null;
         this.playerRetargetCooldown = tag.getInt(PLAYER_RETARGET_COOLDOWN_TAG);
         this.rebindCooldown = tag.getInt(REBIND_COOLDOWN_TAG);
+        this.decayTicks = tag.getInt(DECAY_TICKS_TAG);
         this.ownershipVerified = false;
     }
 

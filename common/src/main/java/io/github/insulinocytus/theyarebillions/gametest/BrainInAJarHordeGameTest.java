@@ -3,9 +3,12 @@ package io.github.insulinocytus.theyarebillions.gametest;
 import com.mojang.authlib.GameProfile;
 import io.netty.channel.embedded.EmbeddedChannel;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import io.github.insulinocytus.theyarebillions.HordeZombie;
@@ -145,6 +148,86 @@ public final class BrainInAJarHordeGameTest {
                 helper.assertTrue(initialPositions.size() >= 32, "The nighttime Brain did not create 32 horde zombies");
                 assertDirectionalPositions(helper, level, brainPos, initialPositions.values());
             })
+            .thenExecute(cleanup)
+            .thenSucceed();
+    }
+
+    public static void verifySunriseStopsRefill(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var server = level.getServer();
+        var gameRules = level.getGameRules();
+        boolean originalMobSpawning = gameRules.getBoolean(GameRules.RULE_DOMOBSPAWNING);
+        Difficulty originalDifficulty = level.getDifficulty();
+        int originalSimulationDistance = server.getPlayerList().getSimulationDistance();
+        BlockPos brainPos = helper.absolutePos(REMOTE_BRAIN);
+        AABB query = new AABB(brainPos).inflate(144.0, 48.0, 144.0);
+        BlockPos shelter = brainPos.offset(4, 0, 0);
+        Set<UUID> sunriseHorde = new HashSet<>();
+        List<BlockPos> shelterBlocks = new ArrayList<>();
+        HordeZombie[] survivor = {null};
+        boolean[] sunrise = {false};
+
+        server.getPlayerList().setSimulationDistance(TEST_SIMULATION_DISTANCE);
+        level.getChunk(brainPos);
+        prepareSpawnArea(level, brainPos, false);
+        server.setDifficulty(Difficulty.HARD, true);
+        gameRules.getRule(GameRules.RULE_DOMOBSPAWNING).set(true, server);
+        hordeZombies(level, query).forEach(Entity::discard);
+        level.setDayTime(18000L);
+        level.setBlockAndUpdate(brainPos, TheyAreBillions.BRAIN_IN_A_JAR_BLOCK.get().defaultBlockState());
+
+        Runnable cleanup = () -> {
+            hordeZombies(level, query).forEach(Entity::discard);
+            shelterBlocks.forEach(pos -> level.setBlock(pos, Blocks.AIR.defaultBlockState(), 2));
+            level.removeBlock(brainPos, false);
+            clearSpawnArea(level, brainPos, false);
+            gameRules.getRule(GameRules.RULE_DOMOBSPAWNING).set(originalMobSpawning, server);
+            server.setDifficulty(originalDifficulty, true);
+            server.getPlayerList().setSimulationDistance(originalSimulationDistance);
+        };
+        helper.runAtTickTime(399, cleanup);
+        helper.onEachTick(() -> {
+            List<HordeZombie> zombies = hordeZombies(level, query);
+            zombies.forEach(zombie -> {
+                zombie.setNoAi(true);
+                zombie.setNoGravity(true);
+                zombie.getNavigation().stop();
+                zombie.setDeltaMovement(0.0, 0.0, 0.0);
+            });
+            if (sunrise[0]) {
+                assertWithCleanup(
+                    helper,
+                    cleanup,
+                    zombies.stream().allMatch(zombie -> sunriseHorde.contains(zombie.getUUID())),
+                    "A Brain in a Jar spawned a new horde zombie after sunrise"
+                );
+            }
+        });
+
+        helper.startSequence()
+            .thenExecute(() -> {
+                server.setDifficulty(Difficulty.HARD, true);
+                level.setDayTime(18000L);
+            })
+            .thenWaitUntil(() -> helper.assertTrue(
+                !hordeZombies(level, query).isEmpty(), "The nighttime Brain did not create a horde zombie"
+            ))
+            .thenExecute(() -> {
+                List<HordeZombie> zombies = hordeZombies(level, query);
+                survivor[0] = zombies.getFirst();
+                zombies.subList(1, zombies.size()).forEach(Entity::discard);
+                survivor[0].moveTo(shelter.getX() + 0.5, shelter.getY(), shelter.getZ() + 0.5, 0.0F, 0.0F);
+                survivor[0].setNoAi(true);
+                survivor[0].setNoGravity(true);
+                survivor[0].getNavigation().stop();
+                survivor[0].setDeltaMovement(0.0, 0.0, 0.0);
+                sunriseHorde.add(survivor[0].getUUID());
+                shelterBlocks.add(shelter.above(2));
+                shelterBlocks.forEach(pos -> level.setBlock(pos, Blocks.STONE.defaultBlockState(), 2));
+                sunrise[0] = true;
+                level.setDayTime(1000L);
+            })
+            .thenIdle(5)
             .thenExecute(cleanup)
             .thenSucceed();
     }
@@ -524,6 +607,8 @@ public final class BrainInAJarHordeGameTest {
         helper.startSequence()
             .thenIdle(1)
             .thenExecute(() -> {
+                server.setDifficulty(Difficulty.HARD, true);
+                level.setDayTime(18000L);
                 prepareTargetArena(level, brainPos);
                 level.setBlockAndUpdate(brainPos, TheyAreBillions.BRAIN_IN_A_JAR_BLOCK.get().defaultBlockState());
                 level.setBlockAndUpdate(turtleEggPos, Blocks.TURTLE_EGG.defaultBlockState());
@@ -615,6 +700,8 @@ public final class BrainInAJarHordeGameTest {
         BlockPos firstBrain = helper.absolutePos(TARGET_TEST_BRAIN);
         int originalSimulationDistance = server.getPlayerList().getSimulationDistance();
         BlockPos secondBrain = firstBrain.offset(96, 0, 0);
+        var rebindingChunk = new ChunkPos(firstBrain);
+        var rebindingTicket = TicketType.create("they_are_billions:test_rebinding", BlockPos::compareTo);
         AABB query = new AABB(firstBrain).inflate(160.0, 48.0, 160.0);
         HordeZombie[] zombie = {null};
         ServerPlayer[] player = {null};
@@ -622,15 +709,18 @@ public final class BrainInAJarHordeGameTest {
         server.getPlayerList().setSimulationDistance(TEST_SIMULATION_DISTANCE);
         level.getChunk(firstBrain);
         level.getChunk(secondBrain);
+        level.getChunkSource().addRegionTicket(rebindingTicket, rebindingChunk, 2, firstBrain);
         server.setDifficulty(Difficulty.HARD, true);
         gameRules.getRule(GameRules.RULE_DOMOBSPAWNING).set(false, server);
         level.setDayTime(18000L);
 
         Runnable cleanup = () -> {
             removeTestPlayer(server, player[0]);
+            level.getChunkSource().removeRegionTicket(rebindingTicket, rebindingChunk, 2, firstBrain);
             hordeZombies(level, query).forEach(Entity::discard);
             level.removeBlock(firstBrain, false);
             level.removeBlock(secondBrain, false);
+            setTargetRoof(level, firstBrain, Blocks.AIR.defaultBlockState());
             clearTargetArena(level, firstBrain);
             gameRules.getRule(GameRules.RULE_DOMOBSPAWNING).set(originalMobSpawning, server);
             server.setDifficulty(originalDifficulty, true);
@@ -641,7 +731,10 @@ public final class BrainInAJarHordeGameTest {
         helper.startSequence()
             .thenIdle(1)
             .thenExecute(() -> {
+                server.setDifficulty(Difficulty.HARD, true);
+                level.setDayTime(18000L);
                 prepareTargetArena(level, firstBrain);
+                setTargetRoof(level, firstBrain, Blocks.STONE.defaultBlockState());
                 level.setBlockAndUpdate(firstBrain, TheyAreBillions.BRAIN_IN_A_JAR_BLOCK.get().defaultBlockState());
             })
             .thenIdle(20)
@@ -666,6 +759,8 @@ public final class BrainInAJarHordeGameTest {
                 assertWithCleanup(helper, cleanup, zombie[0].isAlive(), "A horde zombie despawned beyond 128 blocks");
                 removeTestPlayer(server, player[0]);
                 player[0] = null;
+                zombie[0].setNoAi(true);
+                zombie[0].setNoGravity(true);
                 level.setDayTime(1000L);
                 level.setBlockAndUpdate(secondBrain, TheyAreBillions.BRAIN_IN_A_JAR_BLOCK.get().defaultBlockState());
             })
@@ -733,6 +828,14 @@ public final class BrainInAJarHordeGameTest {
                 level.setBlock(brainPos.offset(x, -1, z), floor, 2);
                 level.setBlock(brainPos.offset(x, 0, z), Blocks.AIR.defaultBlockState(), 2);
                 level.setBlock(brainPos.offset(x, 1, z), Blocks.AIR.defaultBlockState(), 2);
+            }
+        }
+    }
+
+    private static void setTargetRoof(ServerLevel level, BlockPos brainPos, BlockState roof) {
+        for (int x = -4; x <= 40; x++) {
+            for (int z = -4; z <= 4; z++) {
+                level.setBlock(brainPos.offset(x, 3, z), roof, 2);
             }
         }
     }

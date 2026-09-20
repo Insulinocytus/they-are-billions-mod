@@ -28,6 +28,11 @@ public final class TheyAreBillionsNeoForgeGameTests {
         BrainInAJarHordeGameTest.verifyDirectionalNightHorde(helper);
     }
 
+    @GameTest(template = "empty", batch = "brain_in_a_jar_sunrise", timeoutTicks = 400)
+    public static void brainInAJarSunriseStopsRefill(GameTestHelper helper) {
+        BrainInAJarHordeGameTest.verifySunriseStopsRefill(helper);
+    }
+
     @GameTest(template = "empty", batch = "brain_in_a_jar_horde_capacity", timeoutTicks = 1200)
     public static void brainInAJarHordeCapacity(GameTestHelper helper) {
         BrainInAJarHordeGameTest.verifyCapacityAndGates(helper);
@@ -56,6 +61,16 @@ public final class TheyAreBillionsNeoForgeGameTests {
     @GameTest(template = "empty")
     public static void hordeZombie(GameTestHelper helper) {
         HordeZombieGameTest.verify(helper);
+    }
+
+    @GameTest(template = "empty", batch = "horde_zombie_sunrise", timeoutTicks = 100)
+    public static void hordeZombieSunriseDeath(GameTestHelper helper) {
+        HordeZombieGameTest.verifySunriseDeath(helper);
+    }
+
+    @GameTest(template = "empty", batch = "horde_zombie_decay", timeoutTicks = 200)
+    public static void hordeZombieCoveredDecay(GameTestHelper helper) {
+        HordeZombieGameTest.verifyCoveredDecay(helper);
     }
 
     @GameTest(template = "empty")

@@ -24,6 +24,11 @@ public final class TheyAreBillionsFabricGameTests {
         BrainInAJarHordeGameTest.verifyDirectionalNightHorde(helper);
     }
 
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE, batch = "brain_in_a_jar_sunrise", timeoutTicks = 400)
+    public void brainInAJarSunriseStopsRefill(GameTestHelper helper) {
+        BrainInAJarHordeGameTest.verifySunriseStopsRefill(helper);
+    }
+
     @GameTest(template = FabricGameTest.EMPTY_STRUCTURE, batch = "brain_in_a_jar_horde_capacity", timeoutTicks = 1200)
     public void brainInAJarHordeCapacity(GameTestHelper helper) {
         BrainInAJarHordeGameTest.verifyCapacityAndGates(helper);
@@ -52,6 +57,16 @@ public final class TheyAreBillionsFabricGameTests {
     @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
     public void hordeZombie(GameTestHelper helper) {
         HordeZombieGameTest.verify(helper);
+    }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE, batch = "horde_zombie_sunrise", timeoutTicks = 100)
+    public void hordeZombieSunriseDeath(GameTestHelper helper) {
+        HordeZombieGameTest.verifySunriseDeath(helper);
+    }
+
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE, batch = "horde_zombie_decay", timeoutTicks = 200)
+    public void hordeZombieCoveredDecay(GameTestHelper helper) {
+        HordeZombieGameTest.verifyCoveredDecay(helper);
     }
 
     @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)

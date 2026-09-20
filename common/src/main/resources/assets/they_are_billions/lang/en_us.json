@@ -1,5 +1,6 @@
 {
   "block.they_are_billions.brain_in_a_jar": "Brain in a Jar",
+  "effect.they_are_billions.decay": "Decay",
   "entity.they_are_billions.horde_zombie": "Horde Zombie",
   "itemGroup.they_are_billions": "They Are Billions"
 }
