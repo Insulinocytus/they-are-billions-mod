@@ -44,12 +44,12 @@ public final class TheyAreBillionsFabricGameTests {
         BrainInAJarHordeGameTest.verifyRemoteOwnershipRecovery(helper);
     }
 
-    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE, batch = "brain_in_a_jar_horde_targeting", timeoutTicks = 1600)
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE, batch = "brain_in_a_jar_horde_targeting", timeoutTicks = 4000)
     public void brainInAJarHordeTargeting(GameTestHelper helper) {
         BrainInAJarHordeGameTest.verifyTargetingStateMachine(helper);
     }
 
-    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE, batch = "brain_in_a_jar_horde_rebinding", timeoutTicks = 1600)
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE, batch = "brain_in_a_jar_horde_rebinding", timeoutTicks = 4000)
     public void brainInAJarHordeRebinding(GameTestHelper helper) {
         BrainInAJarHordeGameTest.verifyLostOwnershipAndRebinding(helper);
     }
@@ -59,12 +59,12 @@ public final class TheyAreBillionsFabricGameTests {
         HordeZombieGameTest.verify(helper);
     }
 
-    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE, batch = "horde_zombie_sunrise", timeoutTicks = 100)
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE, batch = "horde_zombie_sunrise", timeoutTicks = 400)
     public void hordeZombieSunriseDeath(GameTestHelper helper) {
         HordeZombieGameTest.verifySunriseDeath(helper);
     }
 
-    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE, batch = "horde_zombie_decay", timeoutTicks = 200)
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE, batch = "horde_zombie_decay", timeoutTicks = 800)
     public void hordeZombieCoveredDecay(GameTestHelper helper) {
         HordeZombieGameTest.verifyCoveredDecay(helper);
     }

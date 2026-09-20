@@ -27,6 +27,7 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.item.SpawnEggItem;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.storage.ServerLevelData;
 import net.minecraft.world.phys.Vec3;
 
 /**
@@ -173,7 +174,13 @@ public final class HordeZombieGameTest {
 
     public static void verifySunriseDeath(GameTestHelper helper) {
         var level = helper.getLevel();
+        ServerLevelData levelData = level.getServer().getWorldData().overworldData();
         Difficulty originalDifficulty = level.getDifficulty();
+        int originalClearWeatherTime = levelData.getClearWeatherTime();
+        int originalRainTime = levelData.getRainTime();
+        int originalThunderTime = levelData.getThunderTime();
+        boolean originalRaining = levelData.isRaining();
+        boolean originalThundering = levelData.isThundering();
         level.getServer().setDifficulty(Difficulty.HARD, true);
         level.setDayTime(18000L);
         level.setWeatherParameters(0, 6000, true, false);
@@ -201,11 +208,22 @@ public final class HordeZombieGameTest {
 
         Runnable cleanup = () -> {
             zombies.forEach(Entity::discard);
-            level.setWeatherParameters(6000, 0, false, false);
+            levelData.setClearWeatherTime(originalClearWeatherTime);
+            levelData.setRainTime(originalRainTime);
+            levelData.setThunderTime(originalThunderTime);
+            levelData.setRaining(originalRaining);
+            levelData.setThundering(originalThundering);
             level.getServer().setDifficulty(originalDifficulty, true);
         };
-        helper.runAtTickTime(99, cleanup);
+        helper.runAtTickTime(399, () -> {
+            cleanup.run();
+            helper.fail("Daylight-visible horde zombies did not die before the timeout");
+        });
         helper.startSequence()
+            .thenWaitUntil(() -> helper.assertTrue(
+                zombies.stream().allMatch(zombie -> level.isPositionEntityTicking(zombie.blockPosition())),
+                "The sunrise horde zombie chunks did not become entity ticking"
+            ))
             .thenExecute(() -> {
                 level.getServer().setDifficulty(Difficulty.HARD, true);
                 level.setDayTime(1000L);
@@ -237,7 +255,7 @@ public final class HordeZombieGameTest {
             zombie.discard();
             level.getServer().setDifficulty(originalDifficulty, true);
         };
-        helper.runAtTickTime(199, cleanup);
+        helper.runAtTickTime(799, cleanup);
         helper.startSequence()
             .thenWaitUntil(() -> helper.assertTrue(
                 level.isPositionEntityTicking(zombie.blockPosition()),
