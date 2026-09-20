@@ -59,7 +59,7 @@ public final class TheyAreBillionsFabricGameTests {
         HordeZombieGameTest.verify(helper);
     }
 
-    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE, batch = "horde_zombie_sunrise", timeoutTicks = 400)
+    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE, batch = "horde_zombie_sunrise", timeoutTicks = 100)
     public void hordeZombieSunriseDeath(GameTestHelper helper) {
         HordeZombieGameTest.verifySunriseDeath(helper);
     }

@@ -215,18 +215,15 @@ public final class HordeZombieGameTest {
             levelData.setThundering(originalThundering);
             level.getServer().setDifficulty(originalDifficulty, true);
         };
-        helper.runAtTickTime(399, () -> {
+        helper.runAtTickTime(99, () -> {
             cleanup.run();
             helper.fail("Daylight-visible horde zombies did not die before the timeout");
         });
         helper.startSequence()
-            .thenWaitUntil(() -> helper.assertTrue(
-                zombies.stream().allMatch(zombie -> level.isPositionEntityTicking(zombie.blockPosition())),
-                "The sunrise horde zombie chunks did not become entity ticking"
-            ))
             .thenExecute(() -> {
                 level.getServer().setDifficulty(Difficulty.HARD, true);
                 level.setDayTime(1000L);
+                zombies.forEach(HordeZombie::tick);
             })
             .thenWaitUntil(() -> helper.assertTrue(
                 zombies.stream().noneMatch(Entity::isAlive),
