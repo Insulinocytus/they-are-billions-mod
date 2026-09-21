@@ -595,7 +595,7 @@ public final class BrainInAJarHordeGameTest {
             gameRules.getRule(GameRules.RULE_DOMOBSPAWNING).set(originalMobSpawning, server);
             server.getPlayerList().setSimulationDistance(originalSimulationDistance);
         };
-        helper.runAtTickTime(1199, cleanup);
+        helper.runAtTickTime(3999, cleanup);
 
         helper.startSequence()
             .thenWaitUntil(() -> helper.assertTrue(

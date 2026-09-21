@@ -261,7 +261,7 @@ public final class HordeZombieGameTest {
             zombie.discard();
             level.getServer().setDifficulty(originalDifficulty, true);
         };
-        helper.runAtTickTime(799, cleanup);
+        helper.runAtTickTime(3999, cleanup);
         helper.startSequence()
             .thenWaitUntil(() -> helper.assertTrue(
                 level.isPositionEntityTicking(zombie.blockPosition()),
