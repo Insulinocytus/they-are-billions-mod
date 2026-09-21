@@ -91,7 +91,6 @@ public final class TheyAreBillions {
         TickEvent.SERVER_LEVEL_POST.register(HordeZombie::validatePendingOwnership);
         if (RestartPersistenceIntegrationTest.enabled()) {
             TickEvent.SERVER_LEVEL_POST.register(RestartPersistenceIntegrationTest::tick);
-            LifecycleEvent.SERVER_STARTED.register(RestartPersistenceIntegrationTest::start);
         }
         LifecycleEvent.SERVER_STOPPING.register(HordeZombie::beginServerShutdown);
         LifecycleEvent.SERVER_LEVEL_SAVE.register(HordeZombie::beginLevelSave);

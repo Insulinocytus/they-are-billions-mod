@@ -42,6 +42,7 @@ final class RestartPersistenceIntegrationTest {
     private static final int SAVED_OWNERSHIP_SIZE = 295;
     private static final int MAX_HORDE_SIZE = 300;
     private static final int PRE_TIMEOUT_CHECK_TICK = 42;
+    private static final int TARGET_JOIN_TICK = 40;
     private static final UUID TARGET_ID = UUID.fromString("ecf0db3b-79aa-45bd-b4cb-a96b4dfe8f55");
     private static final UUID REPRESENTATIVE_ID = UUID.fromString("13e0d839-42d4-4dd0-831f-1edafafb16b6");
     private static final TicketType<BlockPos> TEST_TICKET = TicketType.create(
@@ -75,20 +76,6 @@ final class RestartPersistenceIntegrationTest {
         return !phase.isEmpty();
     }
 
-    static void start(net.minecraft.server.MinecraftServer server) {
-        if (!SETUP.equals(phase) && !VERIFY.equals(phase)) {
-            return;
-        }
-        ServerLevel level = server.overworld();
-        var cookie = CommonListenerCookie.createInitial(new GameProfile(TARGET_ID, "restart-target"), false);
-        target = new RestartTestPlayer(level, cookie);
-        var connection = new Connection(PacketFlow.SERVERBOUND);
-        new EmbeddedChannel(connection);
-        server.getPlayerList().placeNewPlayer(connection, target, cookie);
-        target.moveTo(TARGET_POS.getX() + 0.5, TARGET_POS.getY(), TARGET_POS.getZ() + 0.5, 0.0F, 0.0F);
-        target.setNoGravity(true);
-    }
-
     static void tick(ServerLevel level) {
         if (phase.isEmpty() || !level.dimension().equals(Level.OVERWORLD)) {
             return;
@@ -101,6 +88,16 @@ final class RestartPersistenceIntegrationTest {
         } else {
             throw new IllegalStateException("Unknown restart persistence test phase: " + phase);
         }
+    }
+
+    private static void connectTarget(ServerLevel level) {
+        var cookie = CommonListenerCookie.createInitial(new GameProfile(TARGET_ID, "restart-target"), false);
+        target = new RestartTestPlayer(level, cookie);
+        var connection = new Connection(PacketFlow.SERVERBOUND);
+        new EmbeddedChannel(connection);
+        level.getServer().getPlayerList().placeNewPlayer(connection, target, cookie);
+        target.moveTo(TARGET_POS.getX() + 0.5, TARGET_POS.getY(), TARGET_POS.getZ() + 0.5, 0.0F, 0.0F);
+        target.setNoGravity(true);
     }
 
     private static void setup(ServerLevel level) {
@@ -176,11 +173,14 @@ final class RestartPersistenceIntegrationTest {
         if (stage++ == 0) {
             level.getGameRules().getRule(GameRules.RULE_DOMOBSPAWNING).set(true, level.getServer());
             level.setChunkForced(BRAIN_POS.getX() >> 4, BRAIN_POS.getZ() >> 4, true);
-            target.moveTo(TARGET_POS.getX() + 0.5, TARGET_POS.getY(), TARGET_POS.getZ() + 0.5, 0.0F, 0.0F);
             level.getChunk(BRAIN_POS);
             return;
         }
         RestartState expected = readRestartState();
+        if (stage == TARGET_JOIN_TICK) {
+            connectTarget(level);
+            return;
+        }
         List<HordeZombie> zombies = hordeZombies(level);
         if (!representativeStateVerified) {
             zombies.stream()
@@ -188,6 +188,10 @@ final class RestartPersistenceIntegrationTest {
                 .findFirst()
                 .ifPresent(representative -> {
                     CompoundTag zombieTag = representative.saveWithoutId(new CompoundTag());
+                    require(
+                        zombieTag.hasUUID("PlayerTarget") && TARGET_ID.equals(zombieTag.getUUID("PlayerTarget")),
+                        "Restart cleared the persisted player target before the player reconnected"
+                    );
                     int playerRetargetCooldown = zombieTag.getInt("PlayerRetargetCooldown");
                     require(
                         playerRetargetCooldown == expected.playerRetargetCooldown(),
@@ -204,7 +208,7 @@ final class RestartPersistenceIntegrationTest {
                     representativeStateVerified = true;
                 });
         }
-        if (!representativeStateVerified || stage < PRE_TIMEOUT_CHECK_TICK) {
+        if (!representativeStateVerified || stage < PRE_TIMEOUT_CHECK_TICK || target == null) {
             return;
         }
 

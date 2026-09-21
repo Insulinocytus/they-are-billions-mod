@@ -61,6 +61,7 @@ public final class HordeZombie extends Zombie {
     private @Nullable BlockPos brainPos;
     private boolean ownershipVerified;
     private @Nullable UUID playerTargetId;
+    private boolean awaitingRestoredPlayerTarget;
     private int playerRetargetCooldown;
     private int rebindCooldown;
     private int decayTicks;
@@ -80,6 +81,7 @@ public final class HordeZombie extends Zombie {
         this.brainPos = brainPos.immutable();
         this.ownershipVerified = false;
         this.playerTargetId = null;
+        this.awaitingRestoredPlayerTarget = false;
         this.playerRetargetCooldown = 0;
         this.rebindCooldown = REBIND_INTERVAL;
         this.setTarget(null);
@@ -92,6 +94,7 @@ public final class HordeZombie extends Zombie {
         this.brainPos = null;
         this.ownershipVerified = true;
         this.playerTargetId = null;
+        this.awaitingRestoredPlayerTarget = false;
         this.playerRetargetCooldown = 0;
         this.rebindCooldown = REBIND_INTERVAL;
     }
@@ -167,7 +170,11 @@ public final class HordeZombie extends Zombie {
 
     private void tickOwnedTarget(ServerLevel level) {
         if (this.playerTargetId != null) {
-            ServerPlayer player = level.getEntity(this.playerTargetId) instanceof ServerPlayer target ? target : null;
+            ServerPlayer player = level.getServer().getPlayerList().getPlayer(this.playerTargetId);
+            if (player == null && this.awaitingRestoredPlayerTarget) {
+                return;
+            }
+            this.awaitingRestoredPlayerTarget = false;
             if (player != null && this.isValidOwnedPlayerTarget(player)) {
                 if (this.getTarget() != player) {
                     this.setTarget(player);
@@ -203,6 +210,7 @@ public final class HordeZombie extends Zombie {
         }
         if (nearest != null) {
             this.playerTargetId = nearest.getUUID();
+            this.awaitingRestoredPlayerTarget = false;
             this.setTarget(nearest);
         }
     }
@@ -434,6 +442,7 @@ public final class HordeZombie extends Zombie {
         super.readAdditionalSaveData(tag);
         this.brainPos = tag.contains(BRAIN_POS_TAG) ? BlockPos.of(tag.getLong(BRAIN_POS_TAG)) : null;
         this.playerTargetId = tag.hasUUID(PLAYER_TARGET_TAG) ? tag.getUUID(PLAYER_TARGET_TAG) : null;
+        this.awaitingRestoredPlayerTarget = this.playerTargetId != null;
         this.playerRetargetCooldown = tag.getInt(PLAYER_RETARGET_COOLDOWN_TAG);
         this.rebindCooldown = tag.getInt(REBIND_COOLDOWN_TAG);
         this.decayTicks = tag.getInt(DECAY_TICKS_TAG);
