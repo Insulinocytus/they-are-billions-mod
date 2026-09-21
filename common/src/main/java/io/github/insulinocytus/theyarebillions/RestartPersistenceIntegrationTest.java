@@ -250,6 +250,9 @@ final class RestartPersistenceIntegrationTest {
             level.getGameRules().getRule(GameRules.RULE_DOMOBSPAWNING).set(true, level.getServer());
             level.setChunkForced(BRAIN_POS.getX() >> 4, BRAIN_POS.getZ() >> 4, true);
             level.getChunk(BRAIN_POS);
+            ServerLevel nether = level.getServer().getLevel(Level.NETHER);
+            require(nether != null, "Restart test has no Nether level");
+            nether.getChunk(CROSS_LEVEL_POS);
             return;
         }
         RestartState expected = readRestartState();
