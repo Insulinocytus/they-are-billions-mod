@@ -264,12 +264,17 @@ public final class HordeZombieGameTest {
         zombie.setNoGravity(true);
         zombie.setHealth(10.0F);
         double initialMaxHealth = zombie.getAttributeBaseValue(Attributes.MAX_HEALTH);
-        var decayChunk = new net.minecraft.world.level.ChunkPos(zombie.blockPosition());
-        level.setChunkForced(decayChunk.x, decayChunk.z, true);
+        BlockPos absoluteDecayPos = helper.absolutePos(DECAY_POS);
+        ChunkPos decayChunk = new ChunkPos(absoluteDecayPos);
+        TicketType<BlockPos> chunkTicket = TicketType.create(
+            "they_are_billions:test_horde_zombie_decay", BlockPos::compareTo
+        );
+        level.getChunkSource().addRegionTicket(chunkTicket, decayChunk, 2, absoluteDecayPos);
         int[] firstDecayTick = {0};
+        int[] decayWindowStart = {0};
 
         Runnable cleanup = () -> {
-            level.setChunkForced(decayChunk.x, decayChunk.z, false);
+            level.getChunkSource().removeRegionTicket(chunkTicket, decayChunk, 2, absoluteDecayPos);
             zombie.discard();
             level.getServer().setDifficulty(originalDifficulty, true);
         };
@@ -295,26 +300,46 @@ public final class HordeZombieGameTest {
                 );
                 helper.assertTrue(!decay.isVisible() && !decay.showIcon(), "Decay must hide particles and the HUD icon");
                 level.setDayTime(18000L);
+                decayWindowStart[0] = zombie.tickCount;
             })
-            .thenWaitUntil(() -> helper.assertTrue(
-                zombie.getAttributeBaseValue(Attributes.MAX_HEALTH) <= initialMaxHealth - 1.0,
-                "Decay did not reduce maximum health"
-            ))
+            .thenWaitUntil(() -> {
+                helper.assertTrue(zombie.isAlive(), "The covered horde zombie stopped living during decay");
+                helper.assertTrue(
+                    level.isPositionEntityTicking(zombie.blockPosition()),
+                    "The covered horde zombie stopped entity ticking during decay"
+                );
+                helper.assertTrue(
+                    zombie.tickCount - decayWindowStart[0] >= 20,
+                    "The covered horde zombie has not completed 20 entity ticks"
+                );
+            })
             .thenExecute(() -> {
                 helper.assertTrue(
                     Float.compare(zombie.getHealth(), 9.0F) == 0,
                     "Decay must reduce maximum and current health together"
                 );
+                helper.assertTrue(
+                    zombie.getAttributeBaseValue(Attributes.MAX_HEALTH) <= initialMaxHealth - 1.0,
+                    "Decay did not reduce maximum health after 20 entity ticks"
+                );
                 firstDecayTick[0] = zombie.tickCount;
             })
-            .thenWaitUntil(() -> helper.assertTrue(
-                zombie.getAttributeBaseValue(Attributes.MAX_HEALTH) <= initialMaxHealth - 2.0,
-                "Decay did not repeat after another 20 ticks"
-            ))
+            .thenWaitUntil(() -> {
+                helper.assertTrue(zombie.isAlive(), "The covered horde zombie stopped living during repeated decay");
+                helper.assertTrue(
+                    level.isPositionEntityTicking(zombie.blockPosition()),
+                    "The covered horde zombie stopped entity ticking during repeated decay"
+                );
+                helper.assertTrue(
+                    zombie.tickCount - firstDecayTick[0] >= 20,
+                    "The covered horde zombie has not completed the next 20 entity ticks"
+                );
+            })
             .thenExecute(() -> {
                 helper.assertTrue(
-                    zombie.tickCount - firstDecayTick[0] == 20 && Float.compare(zombie.getHealth(), 8.0F) == 0,
-                    "Decay must reduce both health values every 20 ticks at night"
+                    zombie.getAttributeBaseValue(Attributes.MAX_HEALTH) <= initialMaxHealth - 2.0
+                        && Float.compare(zombie.getHealth(), 8.0F) == 0,
+                    "Decay must reduce both health values every 20 entity ticks at night"
                 );
                 zombie.getAttribute(Attributes.MAX_HEALTH).setBaseValue(1.0);
                 zombie.setHealth(1.0F);
