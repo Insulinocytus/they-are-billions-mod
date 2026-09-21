@@ -63,7 +63,8 @@ final class RestartPersistenceIntegrationTest {
     private static final int TIMEOUT_TICKS = 400;
 
     private static final String phase = System.getProperty(PHASE_PROPERTY, "");
-    private static int stage;
+    private static int setupStage;
+    private static int verifyTick;
     private static int ticks;
 
     private static ServerPlayer target;
@@ -110,7 +111,7 @@ final class RestartPersistenceIntegrationTest {
         int owned = level.getBlockEntity(BRAIN_POS) instanceof BrainInAJarBlockEntity brain
             ? brain.saveWithoutMetadata(level.registryAccess()).getList("OwnedHordeZombies", Tag.TAG_INT_ARRAY).size()
             : -1;
-        return "stage=" + stage + ", owned=" + owned + ", day=" + level.isDay()
+        return "setupStage=" + setupStage + ", verifyTick=" + verifyTick + ", owned=" + owned + ", day=" + level.isDay()
             + ", persisted=" + persistedStateVerified + ", offline=" + offlineTargetVerified
             + ", restored=" + restoredTargetVerified + ", abandoned=" + abandonedTargetReleased
             + ", gate=" + restorationGateVerified + ", reconciled=" + restorationReconciled;
@@ -127,8 +128,8 @@ final class RestartPersistenceIntegrationTest {
     }
 
     private static void setup(ServerLevel level) {
-        if (stage == 0) {
-            stage = 1;
+        if (setupStage == 0) {
+            setupStage = 1;
             level.setDayTime(18000L);
             level.getGameRules().getRule(GameRules.RULE_DOMOBSPAWNING).set(false, level.getServer());
             prepareArena(level);
@@ -137,15 +138,15 @@ final class RestartPersistenceIntegrationTest {
             level.setBlockAndUpdate(BRAIN_POS, TheyAreBillions.BRAIN_IN_A_JAR_BLOCK.get().defaultBlockState());
             return;
         }
-        if (stage == 1) {
+        if (setupStage == 1) {
             if (!level.isPositionEntityTicking(HORDE_POS)) {
                 return;
             }
-            stage = 2;
+            setupStage = 2;
             return;
         }
-        if (stage == 2) {
-            stage = 3;
+        if (setupStage == 2) {
+            setupStage = 3;
             connectTarget(level);
 
             BrainInAJarBlockEntity brain = brain(level);
@@ -199,7 +200,7 @@ final class RestartPersistenceIntegrationTest {
             );
             return;
         }
-        if (stage != 3) {
+        if (setupStage != 3) {
             return;
         }
 
@@ -230,7 +231,7 @@ final class RestartPersistenceIntegrationTest {
             brain(level).ownsHordeZombie(REPRESENTATIVE_ID),
             "Live save released the target horde zombie ownership"
         );
-        stage = 4;
+        setupStage = 4;
         level.getServer().tell(new TickTask(level.getServer().getTickCount() + 1, () -> finish(level)));
     }
 
@@ -243,7 +244,7 @@ final class RestartPersistenceIntegrationTest {
     }
 
     private static void verify(ServerLevel level) {
-        if (stage++ == 0) {
+        if (verifyTick++ == 0) {
             level.getGameRules().getRule(GameRules.RULE_DOMOBSPAWNING).set(true, level.getServer());
             level.setChunkForced(BRAIN_POS.getX() >> 4, BRAIN_POS.getZ() >> 4, true);
             level.getChunk(BRAIN_POS);
@@ -276,7 +277,7 @@ final class RestartPersistenceIntegrationTest {
             require(abandoned.hasEffect(TheyAreBillions.decayEffect()), "Restart lost the decay effect");
             persistedStateVerified = true;
         }
-        if (stage == PRE_RECONNECT_CHECK_TICK) {
+        if (verifyTick == PRE_RECONNECT_CHECK_TICK) {
             require(level.getServer().getPlayerList().getPlayer(TARGET_ID) == null, "Target player connected before the test");
             HordeZombie representative = representative(zombies, "Restart did not restore the target horde zombie");
             CompoundTag zombieTag = representative.saveWithoutId(new CompoundTag());
@@ -304,7 +305,7 @@ final class RestartPersistenceIntegrationTest {
             level.setDayTime(1000L);
             offlineTargetVerified = true;
         }
-        if (stage == TARGET_JOIN_TICK) {
+        if (verifyTick == TARGET_JOIN_TICK) {
             connectTarget(level);
             return;
         }
@@ -314,7 +315,7 @@ final class RestartPersistenceIntegrationTest {
                 restoredTargetVerified = true;
             }
         }
-        if (!abandonedTargetReleased && stage >= POST_RESTORED_TARGET_WAIT_CHECK_TICK && abandoned != null) {
+        if (!abandonedTargetReleased && verifyTick >= POST_RESTORED_TARGET_WAIT_CHECK_TICK && abandoned != null) {
             CompoundTag zombieTag = abandoned.saveWithoutId(new CompoundTag());
             require(!zombieTag.hasUUID("PlayerTarget"), "A player that never reconnected remained targeted");
             require(abandoned.getTarget() == null, "A player that never reconnected resolved to a live target");
@@ -322,7 +323,7 @@ final class RestartPersistenceIntegrationTest {
             require(cooldown > 0 && cooldown < 100, "Abandoned player target did not enter the 100-tick retarget cooldown");
             abandonedTargetReleased = true;
         }
-        if (!persistedStateVerified || !offlineTargetVerified || stage < TARGET_JOIN_TICK + 2 || target == null) {
+        if (!persistedStateVerified || !offlineTargetVerified || verifyTick < TARGET_JOIN_TICK + 2 || target == null) {
             return;
         }
 
@@ -335,7 +336,7 @@ final class RestartPersistenceIntegrationTest {
         var ownedTags = brainTag.getList("OwnedHordeZombies", Tag.TAG_INT_ARRAY);
         int owned = ownedTags.size();
         if (!restorationGateVerified) {
-            if (stage < PRE_RECONCILIATION_CHECK_TICK) {
+            if (verifyTick < PRE_RECONCILIATION_CHECK_TICK) {
                 return;
             }
             require(
@@ -382,7 +383,6 @@ final class RestartPersistenceIntegrationTest {
         require(restoredTargetVerified, "Restart did not re-derive the live player target after reconnect");
         require(abandonedTargetReleased, "Restart did not release a player target that never reconnected");
         finish(level);
-        stage++;
     }
 
     private static BrainInAJarBlockEntity brain(ServerLevel level) {
