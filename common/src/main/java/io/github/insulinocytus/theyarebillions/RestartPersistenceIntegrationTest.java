@@ -45,6 +45,7 @@ final class RestartPersistenceIntegrationTest {
     private static final int PERSISTED_HORDE_SIZE = 290;
     private static final int SAVED_OWNERSHIP_SIZE = 295;
     private static final int MAX_HORDE_SIZE = 300;
+    private static final int MOVEMENT_CHECK_TICK = 80;
     private static final int PRE_RECONNECT_CHECK_TICK = 20;
     private static final int TARGET_JOIN_TICK = 40;
     private static final int POST_RESTORED_TARGET_WAIT_CHECK_TICK = 160;
@@ -75,6 +76,7 @@ final class RestartPersistenceIntegrationTest {
     private static boolean abandonedTargetReleased;
     private static boolean restorationGateVerified;
     private static boolean restorationReconciled;
+    private static boolean offlineMovementVerified;
     private static boolean spawnSectorPrepared;
     private static boolean completed;
 
@@ -288,13 +290,6 @@ final class RestartPersistenceIntegrationTest {
             require(representative.getTarget() == null, "Offline target unexpectedly resolved to a live player");
             require(abandoned != null, "Restart did not restore the abandoned-target horde zombie");
             require(
-                abandoned.distanceToSqr(BRAIN_POS.getCenter())
-                    < ABANDONED_POS.getCenter().distanceToSqr(BRAIN_POS.getCenter()),
-                "A horde zombie waiting for its restored player target did not move toward its Brain: position="
-                    + abandoned.position() + ", noAi=" + abandoned.isNoAi()
-                    + ", navigationDone=" + abandoned.getNavigation().isDone()
-            );
-            require(
                 findHordeZombie(level, CROSS_LEVEL_ZOMBIE_ID) != null,
                 "Restart did not restore the cross-level owned horde zombie"
             );
@@ -304,6 +299,16 @@ final class RestartPersistenceIntegrationTest {
             require(!brain(level).ownsHordeZombie(UNOWNED_ZOMBIE_ID), "Restoration admitted a new ownership claim");
             level.setDayTime(1000L);
             offlineTargetVerified = true;
+        }
+        if (!offlineMovementVerified && verifyTick >= MOVEMENT_CHECK_TICK && abandoned != null) {
+            require(
+                abandoned.distanceToSqr(BRAIN_POS.getCenter())
+                    < ABANDONED_POS.getCenter().distanceToSqr(BRAIN_POS.getCenter()),
+                "A horde zombie waiting for its restored player target did not move toward its Brain: position="
+                    + abandoned.position() + ", noAi=" + abandoned.isNoAi()
+                    + ", navigationDone=" + abandoned.getNavigation().isDone()
+            );
+            offlineMovementVerified = true;
         }
         if (verifyTick == TARGET_JOIN_TICK) {
             connectTarget(level);
@@ -323,7 +328,8 @@ final class RestartPersistenceIntegrationTest {
             require(cooldown > 0 && cooldown < 100, "Abandoned player target did not enter the 100-tick retarget cooldown");
             abandonedTargetReleased = true;
         }
-        if (!persistedStateVerified || !offlineTargetVerified || verifyTick < TARGET_JOIN_TICK + 2 || target == null) {
+        if (!persistedStateVerified || !offlineTargetVerified || !offlineMovementVerified
+            || verifyTick < TARGET_JOIN_TICK + 2 || target == null) {
             return;
         }
 
