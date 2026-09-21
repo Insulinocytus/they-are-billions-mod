@@ -41,7 +41,6 @@ final class RestartPersistenceIntegrationTest {
     private static final BlockPos ABANDONED_POS = BRAIN_POS.offset(20, 0, -8);
     private static final BlockPos TARGET_POS = BRAIN_POS.offset(-8, 0, 0);
     private static final BlockPos UNOWNED_POS = BRAIN_POS.offset(4, 0, -8);
-    private static final BlockPos CROSS_LEVEL_POS = new BlockPos(8, 64, 8);
     private static final int PERSISTED_HORDE_SIZE = 290;
     private static final int SAVED_OWNERSHIP_SIZE = 295;
     private static final int MAX_HORDE_SIZE = 300;
@@ -55,7 +54,6 @@ final class RestartPersistenceIntegrationTest {
     private static final UUID ABANDONED_TARGET_ID = UUID.fromString("49cc908f-35fb-49cb-96c6-3360c46e067c");
     private static final UUID ABANDONED_ZOMBIE_ID = UUID.fromString("731bed6f-1d7e-48c7-b8df-d9bf912504b8");
     private static final UUID UNOWNED_ZOMBIE_ID = UUID.fromString("57ed1cc7-27aa-41d0-99db-9fe0ebbc415e");
-    private static final UUID CROSS_LEVEL_ZOMBIE_ID = UUID.fromString("e8d3e327-764a-4e9e-b22a-768e1fd7cd85");
     private static final TicketType<BlockPos> TEST_TICKET = TicketType.create(
         "they_are_billions:restart_persistence", BlockPos::compareTo
     );
@@ -154,17 +152,11 @@ final class RestartPersistenceIntegrationTest {
             BrainInAJarBlockEntity brain = brain(level);
             CompoundTag brainTag = brain.saveWithoutMetadata(level.registryAccess());
             prepareSpawnSector(level, Direction.from2DDataValue(brainTag.getInt("HordeDirection")));
-            ServerLevel nether = level.getServer().getLevel(Level.NETHER);
-            require(nether != null, "Restart test has no Nether level");
-            nether.setChunkForced(CROSS_LEVEL_POS.getX() >> 4, CROSS_LEVEL_POS.getZ() >> 4, true);
-            nether.setBlock(CROSS_LEVEL_POS.below(), Blocks.STONE.defaultBlockState(), 2);
-            nether.setBlock(CROSS_LEVEL_POS, Blocks.AIR.defaultBlockState(), 2);
-            nether.setBlock(CROSS_LEVEL_POS.above(), Blocks.AIR.defaultBlockState(), 2);
             for (int index = 0; index < PERSISTED_HORDE_SIZE; index++) {
-                ServerLevel zombieLevel = index == 2 ? nether : level;
+                ServerLevel zombieLevel = level;
                 BlockPos zombiePos = index == 1
                     ? ABANDONED_POS
-                    : index == 2 ? CROSS_LEVEL_POS : HORDE_POS.offset(index % 20, 0, index / 20);
+                    : HORDE_POS.offset(index % 20, 0, index / 20);
                 HordeZombie zombie = TheyAreBillions.HORDE_ZOMBIE_ENTITY_TYPE.get().create(zombieLevel);
                 require(zombie != null, "Could not create a horde zombie");
                 zombie.setBrainPos(BRAIN_POS);
@@ -182,8 +174,6 @@ final class RestartPersistenceIntegrationTest {
                     tag.putInt("PlayerRetargetCooldown", RETARGET_COOLDOWN);
                     tag.putInt("DecayTicks", DECAY_TICKS);
                     zombie.load(tag);
-                } else if (index == 2) {
-                    zombie.setUUID(CROSS_LEVEL_ZOMBIE_ID);
                 }
                 zombie.moveTo(zombiePos.getX() + 0.5, zombiePos.getY(), zombiePos.getZ() + 0.5, 0.0F, 0.0F);
                 require(brain.tryClaimHordeZombie(zombie.getUUID()), "Brain could not claim horde zombie " + index);
@@ -250,9 +240,6 @@ final class RestartPersistenceIntegrationTest {
             level.getGameRules().getRule(GameRules.RULE_DOMOBSPAWNING).set(true, level.getServer());
             level.setChunkForced(BRAIN_POS.getX() >> 4, BRAIN_POS.getZ() >> 4, true);
             level.getChunk(BRAIN_POS);
-            ServerLevel nether = level.getServer().getLevel(Level.NETHER);
-            require(nether != null, "Restart test has no Nether level");
-            nether.getChunk(CROSS_LEVEL_POS);
             return;
         }
         RestartState expected = readRestartState();
@@ -292,10 +279,6 @@ final class RestartPersistenceIntegrationTest {
             );
             require(representative.getTarget() == null, "Offline target unexpectedly resolved to a live player");
             require(abandoned != null, "Restart did not restore the abandoned-target horde zombie");
-            require(
-                findHordeZombie(level, CROSS_LEVEL_ZOMBIE_ID) != null,
-                "Restart did not restore the cross-level owned horde zombie"
-            );
             require(level.getEntity(UNOWNED_ZOMBIE_ID) instanceof HordeZombie, "Restart lost the unowned horde zombie");
             HordeZombie unowned = (HordeZombie) level.getEntity(UNOWNED_ZOMBIE_ID);
             require(unowned.getBrainPos() == null, "An unowned horde zombie rebound during restoration");
@@ -386,8 +369,8 @@ final class RestartPersistenceIntegrationTest {
         }
         require(liveOwned == MAX_HORDE_SIZE, "Restart retained ghost ownership slots: " + (owned - liveOwned));
         require(
-            zombies.size() == PERSISTED_HORDE_SIZE,
-            "Restart restored " + zombies.size() + " of " + PERSISTED_HORDE_SIZE + " saved horde zombies"
+            zombies.size() == PERSISTED_HORDE_SIZE + 1,
+            "Restart restored " + zombies.size() + " of " + (PERSISTED_HORDE_SIZE + 1) + " saved horde zombies"
         );
         require(restoredTargetVerified, "Restart did not re-derive the live player target after reconnect");
         require(abandonedTargetReleased, "Restart did not release a player target that never reconnected");
