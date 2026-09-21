@@ -40,16 +40,21 @@ final class RestartPersistenceIntegrationTest {
     private static final BlockPos HORDE_POS = BRAIN_POS.offset(8, 0, 0);
     private static final BlockPos ABANDONED_POS = BRAIN_POS.offset(20, 0, -8);
     private static final BlockPos TARGET_POS = BRAIN_POS.offset(-8, 0, 0);
+    private static final BlockPos UNOWNED_POS = BRAIN_POS.offset(4, 0, -8);
+    private static final BlockPos CROSS_LEVEL_POS = new BlockPos(8, 64, 8);
     private static final int PERSISTED_HORDE_SIZE = 290;
     private static final int SAVED_OWNERSHIP_SIZE = 295;
     private static final int MAX_HORDE_SIZE = 300;
     private static final int PRE_RECONNECT_CHECK_TICK = 20;
     private static final int TARGET_JOIN_TICK = 40;
     private static final int POST_RESTORED_TARGET_WAIT_CHECK_TICK = 160;
+    private static final int PRE_RECONCILIATION_CHECK_TICK = 180;
     private static final UUID TARGET_ID = UUID.fromString("ecf0db3b-79aa-45bd-b4cb-a96b4dfe8f55");
     private static final UUID REPRESENTATIVE_ID = UUID.fromString("13e0d839-42d4-4dd0-831f-1edafafb16b6");
     private static final UUID ABANDONED_TARGET_ID = UUID.fromString("49cc908f-35fb-49cb-96c6-3360c46e067c");
     private static final UUID ABANDONED_ZOMBIE_ID = UUID.fromString("731bed6f-1d7e-48c7-b8df-d9bf912504b8");
+    private static final UUID UNOWNED_ZOMBIE_ID = UUID.fromString("57ed1cc7-27aa-41d0-99db-9fe0ebbc415e");
+    private static final UUID CROSS_LEVEL_ZOMBIE_ID = UUID.fromString("e8d3e327-764a-4e9e-b22a-768e1fd7cd85");
     private static final TicketType<BlockPos> TEST_TICKET = TicketType.create(
         "they_are_billions:restart_persistence", BlockPos::compareTo
     );
@@ -64,9 +69,12 @@ final class RestartPersistenceIntegrationTest {
     private static ServerPlayer target;
     private static boolean persistedStateVerified;
     private static boolean offlineTargetVerified;
+    private static boolean directionVerified;
     private static boolean restoredTargetVerified;
     private static boolean abandonedTargetReleased;
     private static boolean restorationGateVerified;
+    private static boolean restorationReconciled;
+    private static boolean spawnSectorPrepared;
     private static boolean completed;
 
     private record RestartState(int direction, int playerRetargetCooldown, int decayTicks) {
@@ -88,7 +96,7 @@ final class RestartPersistenceIntegrationTest {
         if (phase.isEmpty() || !level.dimension().equals(Level.OVERWORLD)) {
             return;
         }
-        require(++ticks <= TIMEOUT_TICKS, "Restart persistence test timed out in " + phase + " phase");
+        require(++ticks <= TIMEOUT_TICKS, "Restart persistence test timed out in " + phase + " phase: " + status(level));
         if (SETUP.equals(phase)) {
             setup(level);
         } else if (VERIFY.equals(phase)) {
@@ -96,6 +104,16 @@ final class RestartPersistenceIntegrationTest {
         } else {
             throw new IllegalStateException("Unknown restart persistence test phase: " + phase);
         }
+    }
+
+    private static String status(ServerLevel level) {
+        int owned = level.getBlockEntity(BRAIN_POS) instanceof BrainInAJarBlockEntity brain
+            ? brain.saveWithoutMetadata(level.registryAccess()).getList("OwnedHordeZombies", Tag.TAG_INT_ARRAY).size()
+            : -1;
+        return "stage=" + stage + ", owned=" + owned + ", day=" + level.isDay()
+            + ", persisted=" + persistedStateVerified + ", offline=" + offlineTargetVerified
+            + ", restored=" + restoredTargetVerified + ", abandoned=" + abandonedTargetReleased
+            + ", gate=" + restorationGateVerified + ", reconciled=" + restorationReconciled;
     }
 
     private static void connectTarget(ServerLevel level) {
@@ -133,9 +151,18 @@ final class RestartPersistenceIntegrationTest {
             BrainInAJarBlockEntity brain = brain(level);
             CompoundTag brainTag = brain.saveWithoutMetadata(level.registryAccess());
             prepareSpawnSector(level, Direction.from2DDataValue(brainTag.getInt("HordeDirection")));
+            ServerLevel nether = level.getServer().getLevel(Level.NETHER);
+            require(nether != null, "Restart test has no Nether level");
+            nether.setChunkForced(CROSS_LEVEL_POS.getX() >> 4, CROSS_LEVEL_POS.getZ() >> 4, true);
+            nether.setBlock(CROSS_LEVEL_POS.below(), Blocks.STONE.defaultBlockState(), 2);
+            nether.setBlock(CROSS_LEVEL_POS, Blocks.AIR.defaultBlockState(), 2);
+            nether.setBlock(CROSS_LEVEL_POS.above(), Blocks.AIR.defaultBlockState(), 2);
             for (int index = 0; index < PERSISTED_HORDE_SIZE; index++) {
-                BlockPos zombiePos = index == 1 ? ABANDONED_POS : HORDE_POS.offset(index % 20, 0, index / 20);
-                HordeZombie zombie = TheyAreBillions.HORDE_ZOMBIE_ENTITY_TYPE.get().create(level);
+                ServerLevel zombieLevel = index == 2 ? nether : level;
+                BlockPos zombiePos = index == 1
+                    ? ABANDONED_POS
+                    : index == 2 ? CROSS_LEVEL_POS : HORDE_POS.offset(index % 20, 0, index / 20);
+                HordeZombie zombie = TheyAreBillions.HORDE_ZOMBIE_ENTITY_TYPE.get().create(zombieLevel);
                 require(zombie != null, "Could not create a horde zombie");
                 zombie.setBrainPos(BRAIN_POS);
                 zombie.setNoAi(index > 1);
@@ -152,10 +179,12 @@ final class RestartPersistenceIntegrationTest {
                     tag.putInt("PlayerRetargetCooldown", RETARGET_COOLDOWN);
                     tag.putInt("DecayTicks", DECAY_TICKS);
                     zombie.load(tag);
+                } else if (index == 2) {
+                    zombie.setUUID(CROSS_LEVEL_ZOMBIE_ID);
                 }
                 zombie.moveTo(zombiePos.getX() + 0.5, zombiePos.getY(), zombiePos.getZ() + 0.5, 0.0F, 0.0F);
                 require(brain.tryClaimHordeZombie(zombie.getUUID()), "Brain could not claim horde zombie " + index);
-                require(level.addFreshEntity(zombie), "Could not add horde zombie " + index);
+                require(zombieLevel.addFreshEntity(zombie), "Could not add horde zombie " + index);
             }
             for (int index = PERSISTED_HORDE_SIZE; index < SAVED_OWNERSHIP_SIZE; index++) {
                 require(
@@ -183,6 +212,16 @@ final class RestartPersistenceIntegrationTest {
             representativeTag.hasUUID("PlayerTarget") && TARGET_ID.equals(representativeTag.getUUID("PlayerTarget")),
             "Setup horde zombie did not acquire the live player target"
         );
+        HordeZombie unowned = TheyAreBillions.HORDE_ZOMBIE_ENTITY_TYPE.get().create(level);
+        require(unowned != null, "Could not create an unowned horde zombie");
+        unowned.setUUID(UNOWNED_ZOMBIE_ID);
+        unowned.setNoAi(true);
+        unowned.setNoGravity(true);
+        CompoundTag unownedTag = unowned.saveWithoutId(new CompoundTag());
+        unownedTag.putInt("RebindCooldown", 5);
+        unowned.load(unownedTag);
+        unowned.moveTo(UNOWNED_POS.getX() + 0.5, UNOWNED_POS.getY(), UNOWNED_POS.getZ() + 0.5, 0.0F, 0.0F);
+        require(level.addFreshEntity(unowned), "Could not add an unowned horde zombie");
         level.getServer().getCommands().performPrefixedCommand(
             level.getServer().createCommandSourceStack().withLevel(level).withSuppressedOutput(), "save-all flush"
         );
@@ -254,6 +293,15 @@ final class RestartPersistenceIntegrationTest {
                     + abandoned.position() + ", noAi=" + abandoned.isNoAi()
                     + ", navigationDone=" + abandoned.getNavigation().isDone()
             );
+            require(
+                findHordeZombie(level, CROSS_LEVEL_ZOMBIE_ID) != null,
+                "Restart did not restore the cross-level owned horde zombie"
+            );
+            require(level.getEntity(UNOWNED_ZOMBIE_ID) instanceof HordeZombie, "Restart lost the unowned horde zombie");
+            HordeZombie unowned = (HordeZombie) level.getEntity(UNOWNED_ZOMBIE_ID);
+            require(unowned.getBrainPos() == null, "An unowned horde zombie rebound during restoration");
+            require(!brain(level).ownsHordeZombie(UNOWNED_ZOMBIE_ID), "Restoration admitted a new ownership claim");
+            level.setDayTime(1000L);
             offlineTargetVerified = true;
         }
         if (stage == TARGET_JOIN_TICK) {
@@ -280,16 +328,40 @@ final class RestartPersistenceIntegrationTest {
 
         BrainInAJarBlockEntity brain = brain(level);
         CompoundTag brainTag = brain.saveWithoutMetadata(level.registryAccess());
-        require(brainTag.getInt("HordeDirection") == expected.direction(), "Restart changed the Brain direction");
+        if (!directionVerified) {
+            require(brainTag.getInt("HordeDirection") == expected.direction(), "Restart changed the Brain direction");
+            directionVerified = true;
+        }
         var ownedTags = brainTag.getList("OwnedHordeZombies", Tag.TAG_INT_ARRAY);
         int owned = ownedTags.size();
         if (!restorationGateVerified) {
+            if (stage < PRE_RECONCILIATION_CHECK_TICK) {
+                return;
+            }
             require(
                 owned == SAVED_OWNERSHIP_SIZE,
-                "Restart replenished before pending entities restored: expected "
+                "Restart changed ownership before the bounded restoration wait ended: expected "
                     + SAVED_OWNERSHIP_SIZE + ", got " + owned
             );
             restorationGateVerified = true;
+            return;
+        }
+        if (!restorationReconciled) {
+            if (owned == SAVED_OWNERSHIP_SIZE) {
+                return;
+            }
+            require(
+                owned == PERSISTED_HORDE_SIZE,
+                "Restart did not remove only unresolved stale ownership: expected "
+                    + PERSISTED_HORDE_SIZE + ", got " + owned
+            );
+            restorationReconciled = true;
+            level.setDayTime(18000L);
+            return;
+        }
+        if (!spawnSectorPrepared) {
+            prepareSpawnSector(level, Direction.from2DDataValue(brainTag.getInt("HordeDirection")));
+            spawnSectorPrepared = true;
             return;
         }
         if (owned < MAX_HORDE_SIZE) {
@@ -298,7 +370,7 @@ final class RestartPersistenceIntegrationTest {
         require(owned == MAX_HORDE_SIZE, "Restart exceeded the horde capacity: " + owned);
         int liveOwned = 0;
         for (Tag ownedTag : ownedTags) {
-            if (level.getEntity(NbtUtils.loadUUID(ownedTag)) instanceof HordeZombie) {
+            if (findHordeZombie(level, NbtUtils.loadUUID(ownedTag)) != null) {
                 liveOwned++;
             }
         }
@@ -324,6 +396,15 @@ final class RestartPersistenceIntegrationTest {
 
     private static List<HordeZombie> hordeZombies(ServerLevel level) {
         return level.getEntitiesOfClass(HordeZombie.class, new net.minecraft.world.phys.AABB(HORDE_POS).inflate(24.0, 8.0, 24.0));
+    }
+
+    private static HordeZombie findHordeZombie(ServerLevel level, UUID zombieId) {
+        for (ServerLevel serverLevel : level.getServer().getAllLevels()) {
+            if (serverLevel.getEntity(zombieId) instanceof HordeZombie zombie) {
+                return zombie;
+            }
+        }
+        return null;
     }
 
     private static HordeZombie representative(List<HordeZombie> zombies, String failureMessage) {
@@ -394,6 +475,7 @@ final class RestartPersistenceIntegrationTest {
                 level.setBlock(pos.below(), Blocks.STONE.defaultBlockState(), 2);
                 level.setBlock(pos, Blocks.AIR.defaultBlockState(), 2);
                 level.setBlock(pos.above(), Blocks.AIR.defaultBlockState(), 2);
+                level.setBlock(pos.above(2), Blocks.STONE.defaultBlockState(), 2);
             }
         }
     }

@@ -79,6 +79,7 @@ public final class BrainInAJarBlockEntity extends BlockEntity {
         HordeZombie.validatePendingOwnershipBeforeBrainTick(serverLevel);
 
         brain.updateTickets(serverLevel, pos);
+        brain.advanceRestoration(serverLevel);
         if (!serverLevel.isNight()) {
             if (brain.wasNight) {
                 brain.wasNight = false;
@@ -94,12 +95,11 @@ public final class BrainInAJarBlockEntity extends BlockEntity {
             brain.selectedNight = night;
             brain.setChanged();
         }
-        boolean restoringHorde = brain.advanceRestoration(serverLevel);
+
         if (brain.hordeDirection != null
-            && !restoringHorde
+            && brain.hasHordeCapacity()
             && level.getDifficulty() != Difficulty.PEACEFUL
-            && level.getGameRules().getBoolean(GameRules.RULE_DOMOBSPAWNING)
-            && brain.ownedHordeZombies.size() < MAX_HORDE_SIZE) {
+            && level.getGameRules().getBoolean(GameRules.RULE_DOMOBSPAWNING)) {
             brain.trySpawnHordeZombie(serverLevel, pos, brain.hordeDirection);
         }
     }
@@ -176,27 +176,36 @@ public final class BrainInAJarBlockEntity extends BlockEntity {
     }
 
     boolean hasHordeCapacity() {
-        return this.ownedHordeZombies.size() < MAX_HORDE_SIZE;
+        return this.restorationTicks == 0 && this.ownedHordeZombies.size() < MAX_HORDE_SIZE;
     }
 
-    private boolean advanceRestoration(ServerLevel level) {
+    private void advanceRestoration(ServerLevel level) {
         if (this.restorationTicks == 0) {
-            return false;
+            return;
         }
-        this.pendingRestoration.removeIf(zombieId -> level.getEntity(zombieId) instanceof HordeZombie);
+        this.pendingRestoration.removeIf(zombieId -> isHordeZombieLoaded(level, zombieId));
         if (this.pendingRestoration.isEmpty()) {
             this.restorationTicks = 0;
-            return false;
+            return;
         }
         if (--this.restorationTicks > 0) {
-            return true;
+            return;
         }
         if (this.ownedHordeZombies.removeAll(this.pendingRestoration)) {
             this.setChanged();
         }
         this.pendingRestoration.clear();
+    }
+
+    private static boolean isHordeZombieLoaded(ServerLevel level, UUID zombieId) {
+        for (ServerLevel serverLevel : level.getServer().getAllLevels()) {
+            if (serverLevel.getEntity(zombieId) instanceof HordeZombie) {
+                return true;
+            }
+        }
         return false;
     }
+
 
     boolean tryClaimHordeZombie(UUID zombieId) {
         if (this.ownedHordeZombies.contains(zombieId)) {
