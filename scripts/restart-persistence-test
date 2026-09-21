@@ -14,5 +14,24 @@ run_dir="$platform/build/run/restartPersistence"
 rm -rf "$run_dir"
 mkdir -p "$run_dir"
 printf 'eula=true\n' > "$run_dir/eula.txt"
+cat > "$run_dir/server.properties" <<'EOF'
+allow-nether=false
+difficulty=hard
+enable-command-block=false
+enforce-secure-profile=false
+generate-structures=false
+generator-settings={"biome":"minecraft:plains","layers":[{"block":"minecraft:bedrock","height":1},{"block":"minecraft:stone","height":3},{"block":"minecraft:grass_block","height":1}]}
+level-seed=6840227782638526189
+level-type=minecraft:flat
+max-tick-time=0
+online-mode=false
+simulation-distance=8
+spawn-animals=false
+spawn-monsters=false
+spawn-npcs=false
+spawn-protection=0
+sync-chunk-writes=true
+view-distance=2
+EOF
 ./gradlew ":$platform:runRestartPersistenceSetup" --no-parallel
 ./gradlew ":$platform:runRestartPersistenceVerify" --no-parallel

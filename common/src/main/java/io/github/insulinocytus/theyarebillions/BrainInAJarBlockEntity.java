@@ -179,6 +179,10 @@ public final class BrainInAJarBlockEntity extends BlockEntity {
         return this.restorationTicks == 0 && this.ownedHordeZombies.size() < MAX_HORDE_SIZE;
     }
 
+    boolean isRestoringHorde() {
+        return this.restorationTicks > 0;
+    }
+
     private void advanceRestoration(ServerLevel level) {
         if (this.restorationTicks == 0) {
             return;

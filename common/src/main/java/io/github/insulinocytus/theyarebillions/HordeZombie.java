@@ -374,11 +374,6 @@ public final class HordeZombie extends Zombie {
         PERSISTING_SERVERS.add(server);
     }
 
-    static void beginLevelSave(ServerLevel level) {
-        MinecraftServer server = level.getServer();
-        PERSISTING_SERVERS.add(server);
-        server.tell(new TickTask(server.getTickCount() + 1, () -> PERSISTING_SERVERS.remove(server)));
-    }
 
     static void clearPendingOwnership(MinecraftServer server) {
         PERSISTING_SERVERS.remove(server);
