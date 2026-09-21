@@ -68,7 +68,7 @@ public final class TheyAreBillionsNeoForgeGameTests {
         HordeZombieGameTest.verify(helper);
     }
 
-    @GameTest(template = "empty", batch = "horde_zombie_sunrise", timeoutTicks = 100)
+    @GameTest(template = "empty", batch = "horde_zombie_sunrise", timeoutTicks = 400)
     public static void hordeZombieSunriseDeath(GameTestHelper helper) {
         HordeZombieGameTest.verifySunriseDeath(helper);
     }

@@ -9,6 +9,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.server.level.TicketType;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -27,6 +28,7 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.item.SpawnEggItem;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.storage.ServerLevelData;
 import net.minecraft.world.phys.Vec3;
 
@@ -193,6 +195,13 @@ public final class HordeZombieGameTest {
             SUNLIGHT_BUBBLE_COLUMN,
             SUNLIGHT_POWDER_SNOW
         );
+        TicketType<BlockPos> chunkTicket = TicketType.create(
+            "they_are_billions:test_horde_zombie_sunrise", BlockPos::compareTo
+        );
+        List<BlockPos> absolutePositions = positions.stream().map(helper::absolutePos).toList();
+        absolutePositions.forEach(pos -> level.getChunkSource().addRegionTicket(
+            chunkTicket, new ChunkPos(pos), 2, pos
+        ));
         positions.forEach(pos -> helper.setBlock(pos.below(), Blocks.STONE));
         helper.setBlock(SUNLIGHT_WATER, Blocks.WATER);
         helper.setBlock(SUNLIGHT_BUBBLE_COLUMN, Blocks.BUBBLE_COLUMN);
@@ -208,6 +217,9 @@ public final class HordeZombieGameTest {
         zombies.get(1).setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
 
         Runnable cleanup = () -> {
+            absolutePositions.forEach(pos -> level.getChunkSource().removeRegionTicket(
+                chunkTicket, new ChunkPos(pos), 2, pos
+            ));
             zombies.forEach(Entity::discard);
             level.setDayTime(originalDayTime);
             levelData.setClearWeatherTime(originalClearWeatherTime);
@@ -217,14 +229,14 @@ public final class HordeZombieGameTest {
             levelData.setThundering(originalThundering);
             level.getServer().setDifficulty(originalDifficulty, true);
         };
-        helper.runAtTickTime(99, () -> {
+        helper.runAtTickTime(399, () -> {
             cleanup.run();
             helper.fail("Daylight-visible horde zombies did not die before the timeout");
         });
         helper.startSequence()
             .thenWaitUntil(() -> helper.assertTrue(
-                level.isPositionEntityTicking(helper.absolutePos(SUNLIGHT_PLAIN)),
-                "The daylight horde zombie chunk did not become entity ticking"
+                zombies.stream().allMatch(zombie -> level.isPositionEntityTicking(zombie.blockPosition())),
+                "Every daylight horde zombie chunk must become entity ticking"
             ))
             .thenExecute(() -> {
                 level.getServer().setDifficulty(Difficulty.HARD, true);

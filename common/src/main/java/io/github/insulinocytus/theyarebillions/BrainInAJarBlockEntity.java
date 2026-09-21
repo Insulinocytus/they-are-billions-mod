@@ -94,8 +94,9 @@ public final class BrainInAJarBlockEntity extends BlockEntity {
             brain.selectedNight = night;
             brain.setChanged();
         }
+        boolean restoringHorde = brain.advanceRestoration(serverLevel);
         if (brain.hordeDirection != null
-            && !brain.isRestoringHorde(serverLevel)
+            && !restoringHorde
             && level.getDifficulty() != Difficulty.PEACEFUL
             && level.getGameRules().getBoolean(GameRules.RULE_DOMOBSPAWNING)
             && brain.ownedHordeZombies.size() < MAX_HORDE_SIZE) {
@@ -178,16 +179,23 @@ public final class BrainInAJarBlockEntity extends BlockEntity {
         return this.ownedHordeZombies.size() < MAX_HORDE_SIZE;
     }
 
-    private boolean isRestoringHorde(ServerLevel level) {
+    private boolean advanceRestoration(ServerLevel level) {
         if (this.restorationTicks == 0) {
             return false;
         }
         this.pendingRestoration.removeIf(zombieId -> level.getEntity(zombieId) instanceof HordeZombie);
-        if (this.pendingRestoration.isEmpty() || --this.restorationTicks == 0) {
-            this.pendingRestoration.clear();
+        if (this.pendingRestoration.isEmpty()) {
+            this.restorationTicks = 0;
             return false;
         }
-        return true;
+        if (--this.restorationTicks > 0) {
+            return true;
+        }
+        if (this.ownedHordeZombies.removeAll(this.pendingRestoration)) {
+            this.setChanged();
+        }
+        this.pendingRestoration.clear();
+        return false;
     }
 
     boolean tryClaimHordeZombie(UUID zombieId) {
