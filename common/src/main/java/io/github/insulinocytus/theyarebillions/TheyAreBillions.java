@@ -96,5 +96,8 @@ public final class TheyAreBillions {
         LifecycleEvent.SERVER_STOPPING.register(HordeZombie::beginServerShutdown);
         LifecycleEvent.SERVER_LEVEL_SAVE.register(HordeZombie::beginLevelSave);
         LifecycleEvent.SERVER_STOPPED.register(HordeZombie::clearPendingOwnership);
+        if (RestartPersistenceIntegrationTest.enabled()) {
+            LifecycleEvent.SERVER_STOPPED.register(RestartPersistenceIntegrationTest::stop);
+        }
     }
 }

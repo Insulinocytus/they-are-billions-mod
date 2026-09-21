@@ -175,6 +175,7 @@ public final class HordeZombieGameTest {
     public static void verifySunriseDeath(GameTestHelper helper) {
         var level = helper.getLevel();
         ServerLevelData levelData = level.getServer().getWorldData().overworldData();
+        long originalDayTime = level.getDayTime();
         Difficulty originalDifficulty = level.getDifficulty();
         int originalClearWeatherTime = levelData.getClearWeatherTime();
         int originalRainTime = levelData.getRainTime();
@@ -208,6 +209,7 @@ public final class HordeZombieGameTest {
 
         Runnable cleanup = () -> {
             zombies.forEach(Entity::discard);
+            level.setDayTime(originalDayTime);
             levelData.setClearWeatherTime(originalClearWeatherTime);
             levelData.setRainTime(originalRainTime);
             levelData.setThunderTime(originalThunderTime);
@@ -220,11 +222,15 @@ public final class HordeZombieGameTest {
             helper.fail("Daylight-visible horde zombies did not die before the timeout");
         });
         helper.startSequence()
+            .thenWaitUntil(() -> helper.assertTrue(
+                level.isPositionEntityTicking(helper.absolutePos(SUNLIGHT_PLAIN)),
+                "The daylight horde zombie chunk did not become entity ticking"
+            ))
             .thenExecute(() -> {
                 level.getServer().setDifficulty(Difficulty.HARD, true);
                 level.setDayTime(1000L);
-                zombies.forEach(HordeZombie::tick);
             })
+            .thenIdle(1)
             .thenWaitUntil(() -> helper.assertTrue(
                 zombies.stream().noneMatch(Entity::isAlive),
                 "Daylight-visible horde zombies must die immediately through helmets, rain, water, bubble columns and powder snow"

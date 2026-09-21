@@ -94,7 +94,6 @@ public final class BrainInAJarBlockEntity extends BlockEntity {
             brain.selectedNight = night;
             brain.setChanged();
         }
-        int ownedHordeZombies = brain.ownedHordeZombies.size();
         if (brain.hordeDirection != null
             && !brain.isRestoringHorde(serverLevel)
             && level.getDifficulty() != Difficulty.PEACEFUL
