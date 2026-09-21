@@ -48,6 +48,11 @@ public final class TheyAreBillionsNeoForgeGameTests {
         BrainInAJarHordeGameTest.verifyRemoteOwnershipRecovery(helper);
     }
 
+    @GameTest(template = "empty", batch = "brain_in_a_jar_unowned_unload", timeoutTicks = 1200)
+    public static void brainInAJarUnownedRuntimeUnload(GameTestHelper helper) {
+        BrainInAJarHordeGameTest.verifyUnownedRuntimeUnload(helper);
+    }
+
     @GameTest(template = "empty", batch = "brain_in_a_jar_horde_targeting", timeoutTicks = 4000)
     public static void brainInAJarHordeTargeting(GameTestHelper helper) {
         BrainInAJarHordeGameTest.verifyTargetingStateMachine(helper);

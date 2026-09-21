@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+platform=${1:?usage: scripts/restart-persistence-test <fabric|neoforge>}
+case "$platform" in
+    fabric|neoforge) ;;
+    *)
+        echo "unsupported platform: $platform" >&2
+        exit 2
+        ;;
+esac
+
+run_dir="$platform/build/run/restartPersistence"
+rm -rf "$run_dir"
+mkdir -p "$run_dir"
+printf 'eula=true\n' > "$run_dir/eula.txt"
+./gradlew ":$platform:runRestartPersistenceSetup" --no-parallel
+./gradlew ":$platform:runRestartPersistenceVerify" --no-parallel

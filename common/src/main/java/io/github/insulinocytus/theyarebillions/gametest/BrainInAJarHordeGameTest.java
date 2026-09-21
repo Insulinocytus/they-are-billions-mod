@@ -565,6 +565,82 @@ public final class BrainInAJarHordeGameTest {
             .thenSucceed();
     }
 
+    public static void verifyUnownedRuntimeUnload(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var server = level.getServer();
+        var gameRules = level.getGameRules();
+        boolean originalMobSpawning = gameRules.getBoolean(GameRules.RULE_DOMOBSPAWNING);
+        int originalSimulationDistance = server.getPlayerList().getSimulationDistance();
+        BlockPos brainPos = helper.absolutePos(REMOTE_BRAIN);
+        BlockPos remotePos = brainPos.offset(384, 0, 0);
+        var remoteChunk = new ChunkPos(remotePos);
+        var remoteTicket = TicketType.create("they_are_billions:test_unowned_unload", BlockPos::compareTo);
+        AABB remoteQuery = new AABB(remotePos).inflate(8.0, 16.0, 8.0);
+        int[] remoteTicketRadius = {2};
+        HordeZombie[] unloadedZombie = {null};
+
+        server.getPlayerList().setSimulationDistance(TEST_SIMULATION_DISTANCE);
+        gameRules.getRule(GameRules.RULE_DOMOBSPAWNING).set(false, server);
+        level.getChunk(brainPos);
+        level.setBlockAndUpdate(brainPos, TheyAreBillions.BRAIN_IN_A_JAR_BLOCK.get().defaultBlockState());
+        level.getChunkSource().addRegionTicket(remoteTicket, remoteChunk, remoteTicketRadius[0], remotePos);
+
+        Runnable cleanup = () -> {
+            if (remoteTicketRadius[0] >= 0) {
+                level.getChunkSource().removeRegionTicket(remoteTicket, remoteChunk, remoteTicketRadius[0], remotePos);
+                remoteTicketRadius[0] = -1;
+            }
+            hordeZombies(level, remoteQuery).forEach(Entity::discard);
+            level.removeBlock(brainPos, false);
+            gameRules.getRule(GameRules.RULE_DOMOBSPAWNING).set(originalMobSpawning, server);
+            server.getPlayerList().setSimulationDistance(originalSimulationDistance);
+        };
+        helper.runAtTickTime(1199, cleanup);
+
+        helper.startSequence()
+            .thenWaitUntil(() -> helper.assertTrue(
+                level.isPositionEntityTicking(remotePos), "The unowned unload chunk did not become entity ticking"
+            ))
+            .thenExecute(() -> {
+                HordeZombie zombie = createOwnedHordeZombie(helper, level, brainPos, remotePos);
+                unloadedZombie[0] = zombie;
+                zombie.setNoAi(true);
+            })
+            .thenExecute(() -> level.destroyBlock(brainPos, false))
+            .thenWaitUntil(() -> helper.assertTrue(
+                hordeZombies(level, remoteQuery).size() == 1
+                    && savedBrainPos(hordeZombies(level, remoteQuery).getFirst()) == null,
+                "Destroying the Brain removed its zombie or left stale ownership"
+            ))
+            .thenExecute(() -> {
+                level.getChunkSource().removeRegionTicket(remoteTicket, remoteChunk, remoteTicketRadius[0], remotePos);
+                remoteTicketRadius[0] = -1;
+            })
+            .thenWaitUntil(() -> helper.assertTrue(
+                !level.areEntitiesLoaded(remoteChunk.toLong()), "The unowned horde zombie chunk did not unload"
+            ))
+            .thenIdle(20)
+            .thenExecute(() -> helper.assertTrue(
+                unloadedZombie[0].isRemoved() && unloadedZombie[0].getRemovalReason() == Entity.RemovalReason.DISCARDED,
+                "The unowned horde zombie was not discarded after its chunk unloaded"
+            ))
+            .thenExecute(() -> {
+                remoteTicketRadius[0] = 0;
+                level.getChunkSource().addRegionTicket(remoteTicket, remoteChunk, remoteTicketRadius[0], remotePos);
+            })
+            .thenWaitUntil(() -> helper.assertTrue(
+                level.areEntitiesLoaded(remoteChunk.toLong()), "The unowned horde zombie chunk did not reload"
+            ))
+            .thenExecute(() -> assertWithCleanup(
+                helper,
+                cleanup,
+                hordeZombies(level, remoteQuery).isEmpty(),
+                "A horde zombie persisted across a runtime chunk unload after its Brain was destroyed"
+            ))
+            .thenExecute(cleanup)
+            .thenSucceed();
+    }
+
     public static void verifyTargetingStateMachine(GameTestHelper helper) {
         var level = helper.getLevel();
         var server = level.getServer();

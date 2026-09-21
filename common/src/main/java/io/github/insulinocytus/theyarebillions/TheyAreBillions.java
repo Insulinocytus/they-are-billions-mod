@@ -89,6 +89,12 @@ public final class TheyAreBillions {
         ENTITY_TYPES.register();
         EntityAttributeRegistry.register(HORDE_ZOMBIE_ENTITY_TYPE, Zombie::createAttributes);
         TickEvent.SERVER_LEVEL_POST.register(HordeZombie::validatePendingOwnership);
-        LifecycleEvent.SERVER_STOPPED.register(server -> HordeZombie.clearPendingOwnership());
+        if (RestartPersistenceIntegrationTest.enabled()) {
+            TickEvent.SERVER_LEVEL_POST.register(RestartPersistenceIntegrationTest::tick);
+            LifecycleEvent.SERVER_STARTED.register(RestartPersistenceIntegrationTest::start);
+        }
+        LifecycleEvent.SERVER_STOPPING.register(HordeZombie::beginServerShutdown);
+        LifecycleEvent.SERVER_LEVEL_SAVE.register(HordeZombie::beginLevelSave);
+        LifecycleEvent.SERVER_STOPPED.register(HordeZombie::clearPendingOwnership);
     }
 }
