@@ -1,6 +1,8 @@
 package io.github.insulinocytus.theyarebillions;
 
 import java.util.HashMap;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
@@ -9,6 +11,7 @@ import java.util.UUID;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.TickTask;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -53,10 +56,12 @@ public final class HordeZombie extends Zombie {
     private static final Set<HordeZombie> PENDING_OWNERSHIP_VALIDATIONS = new HashSet<>();
     private static final Map<BlockPos, Set<UUID>> PENDING_OWNERSHIP_RELEASES = new HashMap<>();
     private static long lastPreBrainValidationGameTime = Long.MIN_VALUE;
+    private static final Set<MinecraftServer> PERSISTING_SERVERS = Collections.newSetFromMap(new IdentityHashMap<>());
 
     private @Nullable BlockPos brainPos;
     private boolean ownershipVerified;
     private @Nullable UUID playerTargetId;
+    private boolean awaitingRestoredPlayerTarget;
     private int playerRetargetCooldown;
     private int rebindCooldown;
     private int decayTicks;
@@ -76,6 +81,7 @@ public final class HordeZombie extends Zombie {
         this.brainPos = brainPos.immutable();
         this.ownershipVerified = false;
         this.playerTargetId = null;
+        this.awaitingRestoredPlayerTarget = false;
         this.playerRetargetCooldown = 0;
         this.rebindCooldown = REBIND_INTERVAL;
         this.setTarget(null);
@@ -88,6 +94,7 @@ public final class HordeZombie extends Zombie {
         this.brainPos = null;
         this.ownershipVerified = true;
         this.playerTargetId = null;
+        this.awaitingRestoredPlayerTarget = false;
         this.playerRetargetCooldown = 0;
         this.rebindCooldown = REBIND_INTERVAL;
     }
@@ -163,13 +170,24 @@ public final class HordeZombie extends Zombie {
 
     private void tickOwnedTarget(ServerLevel level) {
         if (this.playerTargetId != null) {
-            ServerPlayer player = level.getEntity(this.playerTargetId) instanceof ServerPlayer target ? target : null;
+            ServerPlayer player = level.getServer().getPlayerList().getPlayer(this.playerTargetId);
+            if (player == null && this.awaitingRestoredPlayerTarget) {
+                if (this.getTarget() != null) {
+                    this.setTarget(null);
+                }
+                if (this.getNavigation().isDone() || this.tickCount % 20 == 0) {
+                    this.moveTowardBrain();
+                }
+                return;
+            }
             if (player != null && this.isValidOwnedPlayerTarget(player)) {
+                this.awaitingRestoredPlayerTarget = false;
                 if (this.getTarget() != player) {
                     this.setTarget(player);
                 }
                 return;
             }
+            this.awaitingRestoredPlayerTarget = false;
             this.playerTargetId = null;
             this.setTarget(null);
             this.playerRetargetCooldown = PLAYER_RETARGET_COOLDOWN;
@@ -186,7 +204,6 @@ public final class HordeZombie extends Zombie {
             return;
         }
 
-
         ServerPlayer nearest = null;
         int nearestDistance = Integer.MAX_VALUE;
         BlockPos zombiePos = this.blockPosition();
@@ -198,6 +215,7 @@ public final class HordeZombie extends Zombie {
             }
         }
         if (nearest != null) {
+            this.awaitingRestoredPlayerTarget = false;
             this.playerTargetId = nearest.getUUID();
             this.setTarget(nearest);
         }
@@ -254,12 +272,15 @@ public final class HordeZombie extends Zombie {
         return false;
     }
 
+
     public void onUnloaded(ServerLevel level) {
         PENDING_OWNERSHIP_VALIDATIONS.remove(this);
         Entity.RemovalReason removalReason = this.getRemovalReason();
-        if (this.brainPos == null
-            || level.getServer().isStopped()
-            || removalReason == Entity.RemovalReason.CHANGED_DIMENSION) {
+        if (isPersisting(level) || removalReason == Entity.RemovalReason.CHANGED_DIMENSION) {
+            return;
+        }
+        if (this.brainPos == null) {
+            level.getServer().tell(new TickTask(level.getServer().getTickCount() + 1, this::discard));
             return;
         }
         UUID zombieId = this.getUUID();
@@ -274,9 +295,20 @@ public final class HordeZombie extends Zombie {
         } else {
             PENDING_OWNERSHIP_RELEASES.computeIfAbsent(ownerPos, ignored -> new HashSet<>()).add(zombieId);
         }
-        if (removalReason == null) {
-            level.getServer().tell(new TickTask(level.getServer().getTickCount(), this::discard));
+        level.getServer().tell(new TickTask(level.getServer().getTickCount() + 1, this::discard));
+    }
+
+    @Override
+    public boolean shouldBeSaved() {
+        if (!(this.level() instanceof ServerLevel level)) {
+            return super.shouldBeSaved();
         }
+        return isPersisting(level) && super.shouldBeSaved();
+    }
+
+    private static boolean isPersisting(ServerLevel level) {
+        MinecraftServer server = level.getServer();
+        return PERSISTING_SERVERS.contains(server) || server.isCurrentlySaving() || server.isStopped();
     }
 
     public boolean validateOwnershipOnLoad(ServerLevel currentLevel) {
@@ -333,6 +365,16 @@ public final class HordeZombie extends Zombie {
                 zombies.remove();
             }
         }
+    }
+
+    static void beginServerShutdown(MinecraftServer server) {
+        PERSISTING_SERVERS.add(server);
+    }
+
+
+    static void clearPendingOwnership(MinecraftServer server) {
+        PERSISTING_SERVERS.remove(server);
+        clearPendingOwnership();
     }
 
     static void clearPendingOwnership() {
@@ -401,6 +443,7 @@ public final class HordeZombie extends Zombie {
         super.readAdditionalSaveData(tag);
         this.brainPos = tag.contains(BRAIN_POS_TAG) ? BlockPos.of(tag.getLong(BRAIN_POS_TAG)) : null;
         this.playerTargetId = tag.hasUUID(PLAYER_TARGET_TAG) ? tag.getUUID(PLAYER_TARGET_TAG) : null;
+        this.awaitingRestoredPlayerTarget = this.playerTargetId != null;
         this.playerRetargetCooldown = tag.getInt(PLAYER_RETARGET_COOLDOWN_TAG);
         this.rebindCooldown = tag.getInt(REBIND_COOLDOWN_TAG);
         this.decayTicks = tag.getInt(DECAY_TICKS_TAG);

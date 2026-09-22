@@ -32,6 +32,7 @@ jobs:
               - 'gradlew'
               - 'gradlew.bat'
               - 'gradle/**'
+              - 'scripts/**'
               - 'common/**'
               - 'fabric/**'
               - 'neoforge/**'
@@ -42,16 +43,21 @@ jobs:
     needs: changes
     if: needs.changes.outputs.build == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: Build
-            task: build
+            command: ./gradlew build --no-parallel
           - name: Fabric GameTest
-            task: :fabric:runGameTest
+            command: ./gradlew :fabric:runGameTest --no-parallel
           - name: NeoForge GameTest
-            task: :neoforge:runGameTestServer
+            command: ./gradlew :neoforge:runGameTestServer --no-parallel
+          - name: Fabric Restart Persistence
+            command: scripts/restart-persistence-test fabric
+          - name: NeoForge Restart Persistence
+            command: scripts/restart-persistence-test neoforge
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -66,7 +72,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
 
       - name: Run ${{ matrix.name }}
-        run: ./gradlew ${{ matrix.task }} --no-parallel
+        run: ${{ matrix.command }}
 
   required-ci:
     name: Required CI

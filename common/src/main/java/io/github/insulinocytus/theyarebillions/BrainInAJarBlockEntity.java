@@ -39,6 +39,7 @@ public final class BrainInAJarBlockEntity extends BlockEntity {
     private static final String HORDE_DIRECTION_TAG = "HordeDirection";
     private static final String WAS_NIGHT_TAG = "WasNight";
     private static final String SELECTED_NIGHT_TAG = "SelectedNight";
+    private static final int RESTORATION_TIMEOUT_TICKS = 200;
     private static final double MIN_SPAWN_DISTANCE = 64.0;
     private static final double MAX_SPAWN_DISTANCE = 128.0;
     private static final double HALF_SECTOR_ANGLE = Math.toRadians(22.5);
@@ -51,6 +52,8 @@ public final class BrainInAJarBlockEntity extends BlockEntity {
     private @Nullable Direction hordeDirection;
     private boolean wasNight;
     private long selectedNight;
+    private final Set<UUID> pendingRestoration = new HashSet<>();
+    private int restorationTicks;
 
     public BrainInAJarBlockEntity(BlockPos pos, BlockState state) {
         super(TheyAreBillions.BRAIN_IN_A_JAR_BLOCK_ENTITY_TYPE.get(), pos, state);
@@ -76,6 +79,7 @@ public final class BrainInAJarBlockEntity extends BlockEntity {
         HordeZombie.validatePendingOwnershipBeforeBrainTick(serverLevel);
 
         brain.updateTickets(serverLevel, pos);
+        brain.advanceRestoration(serverLevel);
         if (!serverLevel.isNight()) {
             if (brain.wasNight) {
                 brain.wasNight = false;
@@ -91,11 +95,11 @@ public final class BrainInAJarBlockEntity extends BlockEntity {
             brain.selectedNight = night;
             brain.setChanged();
         }
-        int ownedHordeZombies = brain.ownedHordeZombies.size();
+
         if (brain.hordeDirection != null
+            && brain.hasHordeCapacity()
             && level.getDifficulty() != Difficulty.PEACEFUL
-            && level.getGameRules().getBoolean(GameRules.RULE_DOMOBSPAWNING)
-            && ownedHordeZombies < MAX_HORDE_SIZE) {
+            && level.getGameRules().getBoolean(GameRules.RULE_DOMOBSPAWNING)) {
             brain.trySpawnHordeZombie(serverLevel, pos, brain.hordeDirection);
         }
     }
@@ -172,8 +176,40 @@ public final class BrainInAJarBlockEntity extends BlockEntity {
     }
 
     boolean hasHordeCapacity() {
-        return this.ownedHordeZombies.size() < MAX_HORDE_SIZE;
+        return this.restorationTicks == 0 && this.ownedHordeZombies.size() < MAX_HORDE_SIZE;
     }
+
+    boolean isRestoringHorde() {
+        return this.restorationTicks > 0;
+    }
+
+    private void advanceRestoration(ServerLevel level) {
+        if (this.restorationTicks == 0) {
+            return;
+        }
+        this.pendingRestoration.removeIf(zombieId -> isHordeZombieLoaded(level, zombieId));
+        if (this.pendingRestoration.isEmpty()) {
+            this.restorationTicks = 0;
+            return;
+        }
+        if (--this.restorationTicks > 0) {
+            return;
+        }
+        if (this.ownedHordeZombies.removeAll(this.pendingRestoration)) {
+            this.setChanged();
+        }
+        this.pendingRestoration.clear();
+    }
+
+    private static boolean isHordeZombieLoaded(ServerLevel level, UUID zombieId) {
+        for (ServerLevel serverLevel : level.getServer().getAllLevels()) {
+            if (serverLevel.getEntity(zombieId) instanceof HordeZombie) {
+                return true;
+            }
+        }
+        return false;
+    }
+
 
     boolean tryClaimHordeZombie(UUID zombieId) {
         if (this.ownedHordeZombies.contains(zombieId)) {
@@ -269,6 +305,9 @@ public final class BrainInAJarBlockEntity extends BlockEntity {
         for (Tag zombieId : tag.getList(OWNED_HORDE_ZOMBIES_TAG, Tag.TAG_INT_ARRAY)) {
             this.ownedHordeZombies.add(NbtUtils.loadUUID(zombieId));
         }
+        this.pendingRestoration.clear();
+        this.pendingRestoration.addAll(this.ownedHordeZombies);
+        this.restorationTicks = this.pendingRestoration.isEmpty() ? 0 : RESTORATION_TIMEOUT_TICKS;
         this.ownsForcedChunk = tag.getBoolean(OWNS_FORCED_CHUNK_TAG);
         this.hordeDirection = tag.contains(HORDE_DIRECTION_TAG, Tag.TAG_INT)
             ? Direction.from2DDataValue(tag.getInt(HORDE_DIRECTION_TAG))

@@ -7,14 +7,37 @@ architectury {
     neoForge()
 }
 
+def developmentModClasses = "they_are_billions%%${sourceSets.main.output.resourcesDir.absolutePath}" + File.pathSeparator +
+    "they_are_billions%%${sourceSets.main.output.classesDirs.asPath}"
+def restartTestState = layout.buildDirectory.file("run/restartPersistence/restart-state").get().asFile.absolutePath
 loom {
+
     runs {
         gameTestServer {
+            environmentVars.put("MOD_CLASSES", developmentModClasses)
             server()
             name "NeoForge GameTest Server"
             vmArg "-Dneoforge.gameTestServer=true"
             vmArg "-Dneoforge.enabledGameTestNamespaces=they_are_billions"
             runDir "build/run/gameTestServer"
+        }
+
+        restartPersistenceSetup {
+            environmentVars.put("MOD_CLASSES", developmentModClasses)
+            server()
+            name "NeoForge restart persistence setup"
+            vmArg "-Dthey_are_billions.restart_test_phase=setup"
+            vmArg "-Dthey_are_billions.restart_test_state=${restartTestState}"
+            runDir "build/run/restartPersistence"
+        }
+
+        restartPersistenceVerify {
+            environmentVars.put("MOD_CLASSES", developmentModClasses)
+            server()
+            name "NeoForge restart persistence verification"
+            vmArg "-Dthey_are_billions.restart_test_phase=verify"
+            vmArg "-Dthey_are_billions.restart_test_state=${restartTestState}"
+            runDir "build/run/restartPersistence"
         }
     }
 }

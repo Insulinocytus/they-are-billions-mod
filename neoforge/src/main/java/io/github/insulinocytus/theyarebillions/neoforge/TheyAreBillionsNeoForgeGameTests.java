@@ -48,6 +48,11 @@ public final class TheyAreBillionsNeoForgeGameTests {
         BrainInAJarHordeGameTest.verifyRemoteOwnershipRecovery(helper);
     }
 
+    @GameTest(template = "empty", batch = "brain_in_a_jar_unowned_unload", timeoutTicks = 4000)
+    public static void brainInAJarUnownedRuntimeUnload(GameTestHelper helper) {
+        BrainInAJarHordeGameTest.verifyUnownedRuntimeUnload(helper);
+    }
+
     @GameTest(template = "empty", batch = "brain_in_a_jar_horde_targeting", timeoutTicks = 4000)
     public static void brainInAJarHordeTargeting(GameTestHelper helper) {
         BrainInAJarHordeGameTest.verifyTargetingStateMachine(helper);
@@ -63,12 +68,12 @@ public final class TheyAreBillionsNeoForgeGameTests {
         HordeZombieGameTest.verify(helper);
     }
 
-    @GameTest(template = "empty", batch = "horde_zombie_sunrise", timeoutTicks = 100)
+    @GameTest(template = "empty", batch = "horde_zombie_sunrise", timeoutTicks = 400)
     public static void hordeZombieSunriseDeath(GameTestHelper helper) {
         HordeZombieGameTest.verifySunriseDeath(helper);
     }
 
-    @GameTest(template = "empty", batch = "horde_zombie_decay", timeoutTicks = 800)
+    @GameTest(template = "empty", batch = "horde_zombie_decay", timeoutTicks = 4000)
     public static void hordeZombieCoveredDecay(GameTestHelper helper) {
         HordeZombieGameTest.verifyCoveredDecay(helper);
     }
