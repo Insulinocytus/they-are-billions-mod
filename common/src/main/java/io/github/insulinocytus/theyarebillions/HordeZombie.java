@@ -61,7 +61,6 @@ public final class HordeZombie extends Zombie {
     private @Nullable BlockPos brainPos;
     private boolean ownershipVerified;
     private @Nullable UUID playerTargetId;
-    private int restoredPlayerTargetWaitTicks;
     private int playerRetargetCooldown;
     private int rebindCooldown;
     private int decayTicks;
@@ -81,7 +80,6 @@ public final class HordeZombie extends Zombie {
         this.brainPos = brainPos.immutable();
         this.ownershipVerified = false;
         this.playerTargetId = null;
-        this.restoredPlayerTargetWaitTicks = 0;
         this.playerRetargetCooldown = 0;
         this.rebindCooldown = REBIND_INTERVAL;
         this.setTarget(null);
@@ -94,7 +92,6 @@ public final class HordeZombie extends Zombie {
         this.brainPos = null;
         this.ownershipVerified = true;
         this.playerTargetId = null;
-        this.restoredPlayerTargetWaitTicks = 0;
         this.playerRetargetCooldown = 0;
         this.rebindCooldown = REBIND_INTERVAL;
     }
@@ -171,20 +168,16 @@ public final class HordeZombie extends Zombie {
     private void tickOwnedTarget(ServerLevel level) {
         if (this.playerTargetId != null) {
             ServerPlayer player = level.getServer().getPlayerList().getPlayer(this.playerTargetId);
-            if (player == null && this.restoredPlayerTargetWaitTicks > 0) {
-                this.restoredPlayerTargetWaitTicks--;
+            if (player == null) {
                 if (this.getTarget() != null) {
                     this.setTarget(null);
                 }
                 if (this.getNavigation().isDone() || this.tickCount % 20 == 0) {
                     this.moveTowardBrain();
                 }
-                if (this.restoredPlayerTargetWaitTicks > 0) {
-                    return;
-                }
+                return;
             }
-            this.restoredPlayerTargetWaitTicks = 0;
-            if (player != null && this.isValidOwnedPlayerTarget(player)) {
+            if (this.isValidOwnedPlayerTarget(player)) {
                 if (this.getTarget() != player) {
                     this.setTarget(player);
                 }
@@ -206,7 +199,6 @@ public final class HordeZombie extends Zombie {
             return;
         }
 
-
         ServerPlayer nearest = null;
         int nearestDistance = Integer.MAX_VALUE;
         BlockPos zombiePos = this.blockPosition();
@@ -219,7 +211,6 @@ public final class HordeZombie extends Zombie {
         }
         if (nearest != null) {
             this.playerTargetId = nearest.getUUID();
-            this.restoredPlayerTargetWaitTicks = 0;
             this.setTarget(nearest);
         }
     }
@@ -446,7 +437,6 @@ public final class HordeZombie extends Zombie {
         super.readAdditionalSaveData(tag);
         this.brainPos = tag.contains(BRAIN_POS_TAG) ? BlockPos.of(tag.getLong(BRAIN_POS_TAG)) : null;
         this.playerTargetId = tag.hasUUID(PLAYER_TARGET_TAG) ? tag.getUUID(PLAYER_TARGET_TAG) : null;
-        this.restoredPlayerTargetWaitTicks = this.playerTargetId == null ? 0 : PLAYER_RETARGET_COOLDOWN;
         this.playerRetargetCooldown = tag.getInt(PLAYER_RETARGET_COOLDOWN_TAG);
         this.rebindCooldown = tag.getInt(REBIND_COOLDOWN_TAG);
         this.decayTicks = tag.getInt(DECAY_TICKS_TAG);

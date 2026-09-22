@@ -51,8 +51,8 @@ final class RestartPersistenceIntegrationTest {
     private static final int TARGET_RESTORE_DEADLINE_TICKS = 40;
     private static final int PERSISTED_RETARGET_COOLDOWN = 180;
     private static final int MIN_PERSISTED_RETARGET_DELAY_TICKS = 140;
-    private static final int MIN_RETARGET_DELAY_TICKS = 160;
-    private static final int MAX_RETARGET_DELAY_TICKS = 260;
+    private static final int DELAYED_TARGET_CONNECT_TICKS = 160;
+    private static final int RETARGET_COOLDOWN_DEADLINE_TICKS = 260;
     private static final int REFILL_DEADLINE_TICKS = 1200;
     private static final long STAGE_TIMEOUT_NANOS = 4L * 60L * 1_000_000_000L;
     private static final int DECAY_TICKS = 19;
@@ -64,7 +64,7 @@ final class RestartPersistenceIntegrationTest {
     private static final UUID DESTROYED_BRAIN_ZOMBIE_ID = UUID.fromString("5f3ba839-b5ec-4260-bbd3-fc047656d06e");
     private static final UUID TARGET_ID = UUID.fromString("ecf0db3b-79aa-45bd-b4cb-a96b4dfe8f55");
     private static final UUID FALLBACK_TARGET_ID = UUID.fromString("f2b395f8-237f-4201-aa3f-d235d447abaf");
-    private static final UUID ABANDONED_TARGET_ID = UUID.fromString("49cc908f-35fb-49cb-96c6-3360c46e067c");
+    private static final UUID DELAYED_TARGET_ID = UUID.fromString("49cc908f-35fb-49cb-96c6-3360c46e067c");
     private static final TicketType<BlockPos> TEST_TICKET = TicketType.create(
         "they_are_billions:restart_persistence", BlockPos::compareTo
     );
@@ -85,15 +85,17 @@ final class RestartPersistenceIntegrationTest {
     private static BlockPos remotePos;
     private static BlockPos persistenceBrainPos;
     private static BlockPos representativePos;
-    private static BlockPos abandonedPos;
+    private static BlockPos delayedZombiePos;
     private static BlockPos decayPos;
     private static BlockPos targetPos;
     private static BlockPos fallbackTargetPos;
+    private static BlockPos delayedPlayerPos;
 
     private static HordeZombie runtimeUnloadZombie;
     private static HordeZombie destroyedBrainZombie;
     private static ServerPlayer target;
     private static ServerPlayer fallbackTarget;
+    private static ServerPlayer delayedTarget;
     private static RestartState expectedState;
 
     private record RestartState(int direction, float decayMaxHealth, int brainY) {
@@ -120,7 +122,7 @@ final class RestartPersistenceIntegrationTest {
         WAIT_RUNTIME_ENTITY_REMOVED,
         WAIT_RUNTIME_CHUNK_RELOADED,
         WAIT_DESTROYED_CHUNK_TICKING,
-        WAIT_DESTROYED_BRAIN_ABANDONED,
+        WAIT_DESTROYED_BRAIN_UNOWNED,
         WAIT_DESTROYED_CHUNK_UNLOADED,
         WAIT_DESTROYED_ENTITY_REMOVED,
         WAIT_DESTROYED_CHUNK_RELOADED,
@@ -131,7 +133,7 @@ final class RestartPersistenceIntegrationTest {
         VERIFY_TARGET_GUARD,
         WAIT_RESTORED_TARGET,
         VERIFY_RETARGET_COOLDOWN,
-        WAIT_ABANDONED_RETARGET,
+        WAIT_DELAYED_TARGET,
         WAIT_HORDE_REFILL,
         STOPPING
     }
@@ -164,7 +166,7 @@ final class RestartPersistenceIntegrationTest {
             case WAIT_RUNTIME_ENTITY_REMOVED -> waitForRuntimeRemoval(level);
             case WAIT_RUNTIME_CHUNK_RELOADED -> waitForRuntimeReload(level);
             case WAIT_DESTROYED_CHUNK_TICKING -> waitForDestroyedChunk(level);
-            case WAIT_DESTROYED_BRAIN_ABANDONED -> verifyDestroyedBrainAbandonment(level);
+            case WAIT_DESTROYED_BRAIN_UNOWNED -> verifyDestroyedBrainZombieUnowned(level);
             case WAIT_DESTROYED_CHUNK_UNLOADED -> waitForDestroyedChunkUnload(level);
             case WAIT_DESTROYED_ENTITY_REMOVED -> waitForDestroyedRemoval(level);
             case WAIT_DESTROYED_CHUNK_RELOADED -> waitForDestroyedReload(level);
@@ -175,7 +177,7 @@ final class RestartPersistenceIntegrationTest {
             case VERIFY_TARGET_GUARD -> verifyTargetGuard(level);
             case WAIT_RESTORED_TARGET -> waitForRestoredTarget(level);
             case VERIFY_RETARGET_COOLDOWN -> verifyRetargetCooldown(level);
-            case WAIT_ABANDONED_RETARGET -> waitForAbandonedRetarget(level);
+            case WAIT_DELAYED_TARGET -> waitForDelayedTarget(level);
             case WAIT_HORDE_REFILL -> waitForHordeRefill(level);
             case STOPPING -> {
             }
@@ -205,6 +207,7 @@ final class RestartPersistenceIntegrationTest {
         if (level.areEntitiesLoaded(new ChunkPos(remotePos).toLong())) {
             return;
         }
+        executeCommand(level, "save-all flush");
         transition(Stage.WAIT_RUNTIME_ENTITY_REMOVED);
     }
 
@@ -238,10 +241,10 @@ final class RestartPersistenceIntegrationTest {
         BrainInAJarBlockEntity brain = brain(level, unloadBrainPos);
         destroyedBrainZombie = createOwnedZombie(level, brain, unloadBrainPos, remotePos, DESTROYED_BRAIN_ZOMBIE_ID);
         require(level.destroyBlock(unloadBrainPos, false), "Could not destroy the runtime-unload Brain");
-        transition(Stage.WAIT_DESTROYED_BRAIN_ABANDONED);
+        transition(Stage.WAIT_DESTROYED_BRAIN_UNOWNED);
     }
 
-    private static void verifyDestroyedBrainAbandonment(ServerLevel level) {
+    private static void verifyDestroyedBrainZombieUnowned(ServerLevel level) {
         require(!destroyedBrainZombie.isRemoved(), "Destroying the Brain immediately removed its horde zombie");
         require(destroyedBrainZombie.getBrainPos() == null, "Destroying the Brain left stale zombie ownership");
         setRemoteTicket(level, -1);
@@ -261,7 +264,7 @@ final class RestartPersistenceIntegrationTest {
         }
         require(
             destroyedBrainZombie.getRemovalReason() == Entity.RemovalReason.DISCARDED,
-            "The abandoned zombie used the wrong runtime-unload removal reason"
+            "The unowned horde zombie used the wrong runtime-unload removal reason"
         );
         setRemoteTicket(level, REMOTE_TRACKING_TICKET_RADIUS);
         transition(Stage.WAIT_DESTROYED_CHUNK_RELOADED);
@@ -352,15 +355,15 @@ final class RestartPersistenceIntegrationTest {
         require(level.getServer().getPlayerList().getPlayers().isEmpty(), "A test player connected before readiness");
 
         HordeZombie representative = requirePersistedZombie(level, 0);
-        HordeZombie abandoned = requirePersistedZombie(level, 1);
+        HordeZombie delayedTargetZombie = requirePersistedZombie(level, 1);
         HordeZombie decayProbe = requirePersistedZombie(level, 2);
         HordeZombie cooldownProbe = requirePersistedZombie(level, 3);
         require(persistenceBrainPos.equals(representative.getBrainPos()), "Restart lost representative ownership");
-        require(persistenceBrainPos.equals(abandoned.getBrainPos()), "Restart lost abandoned-target ownership");
+        require(persistenceBrainPos.equals(delayedTargetZombie.getBrainPos()), "Restart lost delayed-target ownership");
         require(persistenceBrainPos.equals(decayProbe.getBrainPos()), "Restart lost decay-probe ownership");
         require(persistenceBrainPos.equals(cooldownProbe.getBrainPos()), "Restart lost cooldown-probe ownership");
         require(representative.getTarget() == null, "Offline restored target resolved before reconnect");
-        require(abandoned.getTarget() == null, "Never-connected restored target resolved unexpectedly");
+        require(delayedTargetZombie.getTarget() == null, "Delayed restored target resolved before reconnect");
         require(decayProbe.hasEffect(TheyAreBillions.decayEffect()), "Restart lost the decay effect");
         require(cooldownProbe.getTarget() == null, "Persisted cooldown probe targeted a player before reconnect");
         decayProbe.removeEffect(TheyAreBillions.decayEffect());
@@ -376,9 +379,9 @@ final class RestartPersistenceIntegrationTest {
         verifyRestorationInvariant(level);
         verifyPersistedCooldown(level);
         HordeZombie representative = requirePersistedZombie(level, 0);
-        HordeZombie abandoned = requirePersistedZombie(level, 1);
+        HordeZombie delayedTargetZombie = requirePersistedZombie(level, 1);
         require(representative.getTarget() == null, "Restored target switched to the fallback player");
-        require(abandoned.getTarget() == null, "Never-connected target switched to the fallback player");
+        require(delayedTargetZombie.getTarget() == null, "Delayed restored target switched to the fallback player");
         if (stageTicks < TARGET_GUARD_TICKS) {
             return;
         }
@@ -390,10 +393,10 @@ final class RestartPersistenceIntegrationTest {
         behaviorTicks++;
         verifyRestorationInvariant(level);
         HordeZombie representative = requirePersistedZombie(level, 0);
-        HordeZombie abandoned = requirePersistedZombie(level, 1);
+        HordeZombie delayedTargetZombie = requirePersistedZombie(level, 1);
         verifyPersistedCooldown(level);
         require(representative.getTarget() != fallbackTarget, "Restored target switched to the fallback player");
-        require(abandoned.getTarget() == null, "Never-connected target retargeted before its cooldown");
+        require(delayedTargetZombie.getTarget() == null, "Delayed restored target switched before its player reconnected");
 
         if (representative.getTarget() == target) {
             transition(Stage.VERIFY_RETARGET_COOLDOWN);
@@ -409,33 +412,37 @@ final class RestartPersistenceIntegrationTest {
         behaviorTicks++;
         verifyRestorationInvariant(level);
         verifyPersistedCooldown(level);
-        HordeZombie abandoned = requirePersistedZombie(level, 1);
-        require(abandoned.getTarget() == null, "Never-connected target skipped the restored wait or retarget cooldown");
-        if (behaviorTicks < MIN_RETARGET_DELAY_TICKS) {
+        HordeZombie delayedTargetZombie = requirePersistedZombie(level, 1);
+        require(delayedTargetZombie.getTarget() == null, "Delayed restored target switched before its player reconnected");
+        if (behaviorTicks < DELAYED_TARGET_CONNECT_TICKS) {
             return;
         }
-        transition(Stage.WAIT_ABANDONED_RETARGET);
+        delayedTarget = connectPlayer(level, DELAYED_TARGET_ID, "restart-delayed-target", delayedPlayerPos);
+        transition(Stage.WAIT_DELAYED_TARGET);
     }
 
-    private static void waitForAbandonedRetarget(ServerLevel level) {
+    private static void waitForDelayedTarget(ServerLevel level) {
         behaviorTicks++;
         verifyRestorationInvariant(level);
         verifyPersistedCooldown(level);
-        HordeZombie abandoned = requirePersistedZombie(level, 1);
+        HordeZombie delayedTargetZombie = requirePersistedZombie(level, 1);
         HordeZombie cooldownProbe = requirePersistedZombie(level, 3);
-        if (abandoned.getTarget() != null) {
-            require(
-                abandoned.getTarget() == fallbackTarget || abandoned.getTarget() == target,
-                "Never-connected target resolved to an unexpected entity"
-            );
-            require(cooldownProbe.getTarget() != null, "Persisted player retarget cooldown never expired");
-            transition(Stage.WAIT_HORDE_REFILL);
-            return;
-        }
+        boolean delayedTargetRestored = delayedTargetZombie.getTarget() == delayedTarget;
         require(
-            behaviorTicks <= MAX_RETARGET_DELAY_TICKS,
-            "Never-connected target did not become eligible after its restored cooldown"
+            delayedTargetZombie.getTarget() == null || delayedTargetRestored,
+            "Delayed restored target switched to another player"
         );
+        require(
+            delayedTargetRestored || stageTicks <= TARGET_RESTORE_DEADLINE_TICKS,
+            "Delayed restored target did not resume after its player reconnected"
+        );
+        require(
+            cooldownProbe.getTarget() != null || behaviorTicks <= RETARGET_COOLDOWN_DEADLINE_TICKS,
+            "Persisted player retarget cooldown never expired"
+        );
+        if (delayedTargetRestored && cooldownProbe.getTarget() != null) {
+            transition(Stage.WAIT_HORDE_REFILL);
+        }
     }
 
     private static void waitForHordeRefill(ServerLevel level) {
@@ -539,10 +546,11 @@ final class RestartPersistenceIntegrationTest {
     private static void initializePersistencePositions(int y) {
         persistenceBrainPos = new BlockPos(PERSISTENCE_BRAIN_X, y, PERSISTENCE_BRAIN_Z);
         representativePos = persistenceBrainPos.offset(2, 0, 0);
-        abandonedPos = persistenceBrainPos.offset(3, 0, 0);
+        delayedZombiePos = persistenceBrainPos.offset(3, 0, 0);
         decayPos = persistenceBrainPos.offset(1, 0, 0);
         targetPos = persistenceBrainPos.offset(-2, 0, 0);
         fallbackTargetPos = persistenceBrainPos.offset(-1, 0, 0);
+        delayedPlayerPos = persistenceBrainPos.offset(-3, 0, 0);
     }
 
     private static BlockPos surfacePos(int x, int z) {
@@ -559,7 +567,7 @@ final class RestartPersistenceIntegrationTest {
             zombie.setNoGravity(index >= 2);
             if (index == 1) {
                 CompoundTag tag = zombie.saveWithoutId(new CompoundTag());
-                tag.putUUID("PlayerTarget", ABANDONED_TARGET_ID);
+                tag.putUUID("PlayerTarget", DELAYED_TARGET_ID);
                 zombie.load(tag);
             } else if (index == 2) {
                 zombie.addEffect(new MobEffectInstance(
@@ -589,7 +597,7 @@ final class RestartPersistenceIntegrationTest {
             return representativePos;
         }
         if (index == 1) {
-            return abandonedPos;
+            return delayedZombiePos;
         }
         if (index == 2) {
             return decayPos;

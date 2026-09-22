@@ -284,6 +284,10 @@ public final class HordeZombieGameTest {
                 level.isPositionEntityTicking(zombie.blockPosition()),
                 "The covered horde zombie chunk did not become entity ticking"
             ))
+            .thenWaitUntil(() -> helper.assertTrue(
+                !level.canSeeSky(eyePos(zombie)),
+                "The stone ceiling did not make the horde zombie's eye position sky-dark"
+            ))
             .thenExecute(() -> {
                 level.getServer().setDifficulty(Difficulty.HARD, true);
                 level.setDayTime(1000L);
@@ -303,7 +307,7 @@ public final class HordeZombieGameTest {
                 decayWindowStart[0] = zombie.tickCount;
             })
             .thenWaitUntil(() -> {
-                helper.assertTrue(zombie.isAlive(), "The covered horde zombie stopped living during decay");
+                helper.assertTrue(zombie.isAlive(), "The covered horde zombie stopped living during decay" + decayState(level, zombie));
                 helper.assertTrue(
                     level.isPositionEntityTicking(zombie.blockPosition()),
                     "The covered horde zombie stopped entity ticking during decay"
@@ -350,6 +354,20 @@ public final class HordeZombieGameTest {
                 cleanup.run();
             })
             .thenSucceed();
+    }
+
+    private static BlockPos eyePos(HordeZombie zombie) {
+        return BlockPos.containing(zombie.getX(), zombie.getEyeY(), zombie.getZ());
+    }
+
+    private static String decayState(net.minecraft.server.level.ServerLevel level, HordeZombie zombie) {
+        return " [reason=" + zombie.getRemovalReason()
+            + " health=" + zombie.getHealth()
+            + " baseMax=" + zombie.getAttributeBaseValue(Attributes.MAX_HEALTH)
+            + " tickCount=" + zombie.tickCount
+            + " day=" + level.isDay()
+            + " dayTime=" + level.getDayTime()
+            + " decay=" + zombie.hasEffect(TheyAreBillions.decayEffect()) + "]";
     }
 
     private static void assertNoEquipment(GameTestHelper helper, Zombie zombie) {

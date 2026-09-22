@@ -857,6 +857,10 @@ public final class BrainInAJarHordeGameTest {
                 zombie[0].setNoGravity(true);
                 zombie[0].setDeltaMovement(0.0, 0.0, 0.0);
             })
+            .thenWaitUntil(() -> helper.assertTrue(
+                !level.canSeeSky(eyePos(zombie[0])),
+                "The arena roof did not make the unowned horde zombie's eye position sky-dark"
+            ))
             .thenExecute(() -> {
                 level.setDayTime(1000L);
                 level.setBlockAndUpdate(secondBrain, TheyAreBillions.BRAIN_IN_A_JAR_BLOCK.get().defaultBlockState());
@@ -869,12 +873,12 @@ public final class BrainInAJarHordeGameTest {
             .thenExecute(() -> assertWithCleanup(
                 helper,
                 cleanup,
-                savedBrainPos(zombie[0]) == null,
+                zombie[0].isAlive() && savedBrainPos(zombie[0]) == null,
                 "An unowned horde zombie rebound during daytime"
             ))
             .thenExecute(() -> level.setDayTime(18000L))
             .thenWaitUntil(() -> helper.assertTrue(
-                secondBrain.equals(savedBrainPos(zombie[0])),
+                zombie[0].isAlive() && secondBrain.equals(savedBrainPos(zombie[0])),
                 "An unowned horde zombie did not join the nearest nighttime Brain"
             ))
             .thenExecute(cleanup)
@@ -1006,6 +1010,10 @@ public final class BrainInAJarHordeGameTest {
         public boolean isCreative() {
             return this.gameType == GameType.CREATIVE;
         }
+    }
+
+    private static BlockPos eyePos(HordeZombie zombie) {
+        return BlockPos.containing(zombie.getX(), zombie.getEyeY(), zombie.getZ());
     }
 
     private static BlockPos savedBrainPos(HordeZombie zombie) {
