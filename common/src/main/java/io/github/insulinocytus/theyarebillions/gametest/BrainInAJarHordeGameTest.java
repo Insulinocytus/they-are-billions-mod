@@ -759,7 +759,27 @@ public final class BrainInAJarHordeGameTest {
                 zombie[0].getTarget() == farther[0],
                 "The owned horde zombie did not reacquire an attackable player"
             ))
-            .thenExecute(() -> farther[0].kill())
+            .thenExecute(() -> {
+                nearest[0].moveTo(
+                    zombie[0].getX() + 2.0, zombie[0].getY(), zombie[0].getZ(), nearest[0].getYRot(), nearest[0].getXRot()
+                );
+                removeTestPlayer(server, farther[0]);
+            })
+            .thenWaitUntil(() -> helper.assertTrue(
+                zombie[0].getTarget() == null,
+                "A logged-out player remained targeted"
+            ))
+            .thenExecuteFor(99, () -> assertWithCleanup(
+                helper,
+                cleanup,
+                zombie[0].getTarget() == null,
+                "The owned horde zombie retargeted before the logout cooldown elapsed"
+            ))
+            .thenWaitUntil(() -> helper.assertTrue(
+                zombie[0].getTarget() == nearest[0],
+                "The owned horde zombie did not retarget after its player logged out"
+            ))
+            .thenExecute(() -> nearest[0].kill())
             .thenWaitUntil(() -> helper.assertTrue(
                 zombie[0].getTarget() == null,
                 "A dead player remained targeted"
